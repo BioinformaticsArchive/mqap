@@ -1,0 +1,11 @@
+#!/bin/csh -f
+
+if($#argv != 1  ) then 
+  echo "Usage : ./generaterep.csh  <impl dir> <file_having_list_of_designs> <tech - eg altera> <mode> <dirfortech - eg stratixii> "
+  exit 
+endif 
+
+grep -i $1 ~/pdb_seqres.txt
+grep -i $1 /home/sandeepc/CSA_2_2_12.dat | grep LIT
+grep -i $1 /home/sandeepc/CSA_2_2_12.dat 
+grep -i $1 /home/sandeepc/mapping.txt 

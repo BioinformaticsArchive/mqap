@@ -1,0 +1,11 @@
+IsAA
+SplitCodonIntoNucleotides
+Change2This
+ReplaceOneCodon
+GetWindowCodon
+GetWindowNucleotide
+Change2Lower
+CountNucleotide
+GetTemp
+GetGCCountPercent
+GetHowManyToBeginWith

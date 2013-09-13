@@ -1,0 +1,238 @@
+#!/usr/bin/perl -w 
+use strict ;
+use PDB;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+use ConfigPDB;
+use MyGeom;
+use MyPymol;
+use Math::Geometry ;
+use Math::VectorReal qw(:all);  # Include O X Y Z axis constant vectors
+
+use AAConfig;
+
+my $aaconfig = new AAConfig("/home/sandeepc/aa.config")
+
+
+
+my $ADDONLYREACTIVE = 0 ; 
+my $MATCHREVERSE = 0 ;
+my $POTENTIALMATCH = 0 ;
+my $DISTANCEMATCH = 1  ;
+
+use Time::HiRes qw( usleep ualarm gettimeofday tv_interval clock_gettime clock_getres  clock);
+use POSIX qw(floor);
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($ann,$config,$p1,$p2,$infile,$threshPD,$outfile,$readpotential,$which_tech,$listfile,$protein);
+my $DISTANCEWITHOUTSEQMATCH = 1 ;
+my $verbose = 1 ;
+
+$threshPD = 150 ;
+my ($verify,$radii,$before1,$before2);
+$readpotential = 1 ;
+GetOptions(
+            "which_tech=s"=>\$which_tech ,
+            "protein=s"=>\$protein ,
+            "verify"=>\$verify ,
+            "p1=s"=>\$p1 ,
+            "p2=s"=>\$p2 ,
+            "infile=s"=>\$infile ,
+            "listfile=s"=>\$listfile ,
+            "outfile=s"=>\$outfile ,
+            "ann=s"=>\$ann ,
+            "config=s"=>\$config,
+            "radii=i"=>\$radii ,
+            "threshPD=i"=>\$threshPD ,
+            "readpotential=i"=>\$readpotential ,
+           );
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+usage( "Need to give a output file name => option -outfile ") if(!defined $outfile);
+usage( "Need to give a config file name => option -config ") if(!defined $config);
+usage( "Need to give a radii file name => option -radii ") if(!defined $radii);
+
+
+
+my $ofh = util_write($outfile);
+my $CNT = 0 ; 
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC) = util_SetEnvVars();
+my $PWD = cwd;
+
+ConfigPDB_Init($config,$ofh);
+
+my @proteins ;
+push @proteins, $p1 ;
+push @proteins, $p2 ;
+
+my @info = util_ReadPdbs($PDBDIR,$APBSDIR,$readpotential,@proteins);
+my $pdb1 = $info[0]->{PDBOBJ};
+my $pdb2 = $info[1]->{PDBOBJ};
+my $pqr1 = $info[0]->{PQR};
+my $pqr2 = $info[1]->{PQR};
+my $pots1 = $info[0]->{POTS};
+my $pots2 = $info[1]->{POTS};
+
+
+my $idxtable1 = ProcessOnePDB($pdb1,$pqr1,$pots1);
+my $idxtable2 = ProcessOnePDB($pdb2,$pqr2,$pots2);
+
+
+my $fhmeanPD = util_write("meanPD");
+my $fhmeanPDabs = util_write("meanabsPD");
+my $fhsdPD = util_write("sdPD");
+my $fhsdPDabs = util_write("sdabsPD");
+
+my $fhmeanDD = util_write("meanDD");
+my $fhmeanDDabs = util_write("meanabsDD");
+my $fhsdDD = util_write("sdDD");
+my $fhsdDDabs = util_write("sdabsdD");
+
+my $fhthreshPD = util_write("threshPD");
+my $fhchangesign = util_write("changesign");
+foreach my $i (sort {$a <=> $b}  keys %{$idxtable1}){
+	my $p1 = $idxtable1->{$i}->{PDIFF} ;
+	my $d1 = $idxtable1->{$i}->{DDIFF} ;
+	my $resname1 = $idxtable1->{$i}->{RESNAME} ;
+
+	my $p2 = $idxtable2->{$i}->{PDIFF} or die ;
+	my $d2 = $idxtable2->{$i}->{DDIFF} ;
+	my $indices = $idxtable2->{$i}->{INDICES} ;
+	my $resname2 = $idxtable2->{$i}->{RESNAME} ;
+
+	my @p1 = @{$p1} ;
+	my $N = @p1 ;
+	my @p2 = @{$p2} ; die "n = $N, found ", scalar(@p2),  if($N ne @p2 );
+	my @d1 = @{$d1} ; die if($N ne @d1 );
+	my @d2 = @{$d2} ; die if($N ne @d2 );
+    my $Nminusone = $N -1 ;
+
+	my $fnamep = "$i.PD";
+    my $fhp = util_write($fnamep);
+	my $cnt = 0 ; 
+    my @allPD;
+    my @allPDabs ;
+    my @allDD;
+    my @allDDabs ;
+
+	foreach my $idx (0..$Nminusone){
+		$cnt++ ;
+		if($d1[$idx] > $radii){
+			next ;
+		}
+		my $PD = $p1[$idx] - $p2[$idx];
+		my $DD = $d1[$idx] - $d2[$idx];
+		my $index = $indices->[$idx];
+
+
+
+		my $abs= abs($PD);
+		push @allPD, $PD;
+		push @allPDabs , $abs;
+
+		my $absDD = abs($DD);
+		push @allDD, $DD;
+		push @allDDabs, $absDD;
+
+
+		#print "$i $PD $DD lllllllllll\n";
+		my $changesign = 0 ; 
+		$changesign = 1 if($p1[$idx] > 0 && $p2[$idx] < 0);
+		$changesign = 1 if($p2[$idx] > 0 && $p1[$idx] < 0);
+		print $fhp "$index $PD ($p1[$idx] - $p2[$idx]) $changesign \n";
+
+
+		## dont do abs here - else we will repeat for other direction
+		if($changesign && $PD > 150){
+			 my $aIsPolar = $aaconfig->IsPolar($resname1) ;
+			 my $bIsPolar = $aaconfig->IsPolar($resname2) ;
+
+			 if($aIsPolar && $bIsPolar){
+		         print $fhchangesign "$i->$index $PD ($p1[$idx] - $p2[$idx]) $changesign \n";
+			 }
+		}
+	}
+
+	close($fhp);
+
+	my $meanPD = PrintData($i,\@allPD,\@allPDabs,$fhmeanPD,$fhmeanPDabs,$fhsdPD,$fhsdPDabs);
+	my $meanDD = PrintData($i,\@allDD,\@allDDabs,$fhmeanDD,$fhmeanDDabs,$fhsdDD,$fhsdDDabs);
+
+    if(abs($meanPD) > $threshPD){
+		my $r = $pdb1->GetResidueIdx($i);
+		my $nm = $r->GetName();
+		print $fhthreshPD "$nm$i $meanPD \n";
+    }
+}
+
+
+sub PrintData{
+
+	my ($i,$all,$allabs,$fhmean,$fhmeanabs,$fhsd,$fhsdabs) = @_ ;
+	my $mean = Math::NumberCruncher::Mean($all) or warn "Mean not found" ;
+	my $sd = Math::NumberCruncher::StandardDeviation($all) or warn "sd not found" ;
+	my $meanabs = Math::NumberCruncher::Mean($allabs) or warn "Mean not found" ;
+	my $sdabs = Math::NumberCruncher::StandardDeviation($allabs) or warn "sd not found" ;
+
+	print $fhmean "$i $mean\n";
+	print $fhmeanabs "$i $meanabs\n";
+	print $fhsd "$i $sd\n";
+	print $fhsdabs "$i $sdabs\n";
+	return $mean ;
+}
+
+sub ProcessOnePDB{
+    my ($pdb,$pqr,$pots) = @_ ;
+    my @reslist1 = $pdb->GetResidues();
+    my $idxtable = {};
+    foreach my $r (@reslist1){
+	    my $nm = $r->GetName();
+	    my $idx = $r->GetIdx();
+	    my $atomstr = $r->GetAtomStr();
+	    next if($atomstr eq "HETATM");
+    
+	    my $type = ConfigPDB_GetAtom($r->GetName());
+	    die "undefined type for $nm" if(! defined $type);
+	    my $reactiveatom = $pqr->GetAtomFromResidueAndType($idx,$type);
+	    my $potatom  = util_GetPotForAtom($reactiveatom,$pqr,$pots) ;
+	    #print "$nm $idx $potatom \n";
+	    $idxtable->{$idx} = {};
+	    $idxtable->{$idx}->{ATOM} = $reactiveatom ;
+	    $idxtable->{$idx}->{POT} = $potatom ;
+	    $idxtable->{$idx}->{RESNAME} = $nm ;
+    }
+
+    foreach my $i (sort {$a <=> $b}  keys %{$idxtable}){
+	     my $a1 = $idxtable->{$i}->{ATOM} ;
+	     my $p1 = $idxtable->{$i}->{POT} ;
+	     my @p ; 
+	     my @d ; 
+	     my @indices ; 
+        foreach my $j (sort {$a <=> $b}  keys %{$idxtable}){
+	  	     next if($i eq $j);
+	         my $a2 = $idxtable->{$j}->{ATOM} ;
+	         my $p2 = $idxtable->{$j}->{POT} ;
+		     my $pdiff = $p1 - $p2 ; 
+		     my $dist = $a1->Distance($a2);
+		     #print "$i $j $pdiff $dist\n";
+		     push @p , $pdiff ;
+		     push @d , $dist ;
+		     push @indices , $j ;
+			 
+	    }
+	    $idxtable->{$i}->{PDIFF} = \@p ;
+	    $idxtable->{$i}->{DDIFF} = \@d ;
+	    $idxtable->{$i}->{INDICES} = \@indices
+    }
+    return $idxtable ;
+}
+
+
+sub usage{
+my ($msg) = @_ ;
+print $msg , "\n" ;
+print << "ENDOFUSAGE" ; 
+ENDOFUSAGE
+die ;
+}
+

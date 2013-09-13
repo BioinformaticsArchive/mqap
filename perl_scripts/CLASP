@@ -1,0 +1,365 @@
+#!/usr/bin/perl -w 
+use strict ;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+use PDB;
+use ConfigPDB;
+use MyGeom;
+
+my $THRESHOLD = 75 ; 
+use POSIX qw(floor);
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($potindex,$infile,$outfile,$which_tech,$listfile);
+my (@expressions);
+my $howmany = 50 ;
+my ($link3Dresults,$ref,$query,$motif,$size,$refpotindex,$relaxpotentialcriteria,$dontrunapbs);
+my $verbose = 0 ;
+GetOptions(
+            "which_tech=s"=>\$which_tech ,
+            "infile=s"=>\$infile ,
+            "listfile=s"=>\$listfile ,
+            "link3Dresults=s"=>\$link3Dresults ,
+            "outfile=s"=>\$outfile ,
+            "ref=s"=>\$ref ,
+            "query=s"=>\$query ,
+            "relaxpotentialcriteria"=>\$relaxpotentialcriteria ,
+            "dontrunapbs"=>\$dontrunapbs ,
+            "refpotindex=s"=>\$refpotindex ,
+            "motif=s"=>\$motif ,
+            "expr=s"=>\@expressions,
+            "howmany=i"=>\$howmany ,
+            "potindex=i"=>\$potindex ,
+           );
+
+my $ANNOTATE      =1 ;
+my $FIND          =1 ;
+my $APSBREF       =1 ;
+my $APBSQUERY     =1 ;
+my $FPOCKETREF    =1 ;
+my $FPOCKETQUERY  =1 ;
+my $MERGESCORES   =1 ;
+
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+util_CmdLine("ref",$ref);
+util_CmdLine("query",$query);
+$potindex = 1  if(!defined $potindex);
+#util_CmdLine("refpotindex",$refpotindex);
+
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC,$MATCH3D) = util_SetEnvVars();
+
+
+my $potref = "$APBSDIR/$ref/pot$potindex.dx.atompot";
+my $potquery = "$APBSDIR/$query/pot$potindex.dx.atompot";
+
+util_Banner("Electrostatics using APBS for pdb id $ref and $query");
+if(! -e $potref){
+    die " Potential file $potref doesnt exist" if(defined $dontrunapbs);
+	$APBSDIR = "./";
+    $potref = "$ref/pot$potindex.dx.atompot";
+    if(! -e $potref){
+         warn " Potential file $potref doesnt exist" ;
+         util_RunAPBS($ref);
+	}
+}
+
+if(! -e $potquery){
+    die " Potential file $potquery doesnt exist" if(defined $dontrunapbs);
+	$APBSDIR = "./";
+    $potquery = "$query/pot$potindex.dx.atompot";
+    if(! -e $potquery){
+        warn " Potential file $potquery doesnt exist" ;
+        util_RunAPBS($query);
+	}
+}
+
+util_PrintInfo("Ref electrostatic potential file is $potref");
+util_PrintInfo("Query electrostatic potential file is $potquery");
+
+
+my $PWD = cwd;
+
+my $pdbQ = new PDB();
+my $pdbfile = $PDBDIR . uc($query) . ".pdb";
+$pdbQ->ReadPDB($pdbfile);
+
+my @list;
+if(defined $listfile){
+    @list= util_read_list_sentences($listfile);
+    my $list = {};
+    map { $list->{$_} = 1 ; } @list ;
+}
+
+
+$outfile =  util_getTmpFile();
+my $outfileQ =  "$query.pdb.out";
+my $outfileR =  "$ref.pdb.out";
+my $outconf =  "$ref.outconf";
+
+
+
+if(defined $link3Dresults){
+   util_Banner("Linking results from $link3Dresults");
+   die "File zero size $link3Dresults/$ref/$outfileQ " if(! -e "$link3Dresults/$ref/$outfileQ");
+   die "File zero size $link3Dresults/$ref/$outfileR " if(! -e "$link3Dresults/$ref/$outfileR");
+   die "File zero size $link3Dresults/$ref/$outfileQ " if( -z "$link3Dresults/$ref/$outfileQ");
+   die "File zero size $link3Dresults/$ref/$outfileR " if( -z "$link3Dresults/$ref/$outfileR");
+   util_printAndDo("rm -f $outfileQ ; cp -f $link3Dresults/$ref/$outfileQ . ");
+   util_printAndDo("rm -f $outfileR ; cp -f $link3Dresults/$ref/$outfileR . ");
+
+   $motif =  "$link3Dresults/$ref/$ref.outconf.annotated";
+   my @groups = $pdbQ->GetGroups($motif);
+   $size = @groups ;
+}
+else{
+   util_CmdLine("motif",$motif);
+   my @groups = $pdbQ->GetGroups($motif);
+   $size = @groups ;
+   util_Banner("Annotating motif $motif for ref PDB $ref");
+   util_printAndDo("$SRC/3DMatch -outf $outfile -pdb1 $ref -ann -inco $motif  -outc $outconf");
+   util_Banner("Finding motif $motif in query PDB $query");
+   util_printAndDo("$SRC/3DMatch -outf $outfileQ -pdb1 $query -find -inco  $outconf");
+   util_Banner("Finding motif $motif in ref PDB $ref");
+   util_printAndDo("$SRC/3DMatch -outf $outfileR -pdb1 $ref -find -inco  $outconf");
+}
+my @weights = $pdbQ->GetWeights($motif);
+
+util_RunFPocket($query);
+util_RunFPocket($ref);
+
+my $resultfileQ =  "$query.potentials";
+my $resultfileR =  "$ref.potentials";
+#my $resultfileQ =  "$query.$ref.potentials";
+#my $resultfileR =  "$ref.$query.potentials";
+
+
+
+util_printAndDo("rm -f $resultfileQ $resultfileR");
+util_printAndDo("touch $resultfileQ $resultfileR");
+
+#### for the reference you just need one result
+my $disq = "dis.query";
+my $disr = "dis.ref";
+my $disdiff = "dis.diff";
+#my $disq = "$ref.$query.dis.query";
+#my $disr = "$ref.$query.dis.ref";
+#my $disdiff = "$ref.$query.distance.diff";
+my $potdiff = "pot.diff";
+
+util_printAndDo("rm -f $disr ; touch $disr ; $SRC/APBS/apbsGetVolt.pl -howmany 1  -resultfile $outfileR -proteinName $ref -pqr $APBSDIR/$ref/$ref.pqr -out $resultfileR -pot $potref -dis $disr ");
+util_printAndDo("rm -f $disq ; touch $disq ; $SRC/APBS/apbsGetVolt.pl  -howmany $howmany -resultfile $outfileQ -proteinName $query -pqr $APBSDIR/$query/$query.pqr -out $resultfileQ -pot $potquery -dis $disq ");
+
+
+my $junk =  util_getTmpFile();
+my $junk1 =  util_getTmpFile();
+my $diffQ = ParseAPBSResult($size,$junk,$resultfileQ) or die "Could not parse $resultfileQ";
+my $diffR = ParseAPBSResult($size,$junk1,$resultfileR) or die "Could not parse $resultfileR";
+
+my @diffR = @{$diffR} ;
+my @diffQ = @{$diffQ} ;
+
+my $lR = @diffR ;
+my $lQ = @diffQ ;
+print STDERR "Got $lR and $lQ in ref and query resp\n";
+die if(!$lQ);
+
+
+my $r = shift @diffR ;
+my @r = @{$r};
+#my $refpot = $r[$refpotindex]; 
+
+my $log =  "$query.$ref.log";
+my $logofh = util_write($log);
+my $diffpot =  "$query.$ref.pdb.out";
+my $ofh = util_write($diffpot);
+
+my $rsize = @diffR ;
+my $qsize = @diffQ ;
+
+print $logofh "$rsize $qsize  \n";
+
+my $indexformax = 0 ; 
+$indexformax = 3 if($size == 3);
+$indexformax = 6 if($size == 4);
+$indexformax = 9 if($size == 5);
+$indexformax = 12 if($size == 6);
+$indexformax = 28 if($size == 9);
+die if($size != 3 && $size != 4 && $size != 5 && $size != 6 && $size != 9);
+
+my @potdiffs ;
+my @diffstrs ; 
+my @diffstrspot ; 
+while(@diffQ){
+    my $q = shift @diffQ ;
+	my $maxdiff = 0 ;
+    my @q = @{$q};
+	my $SSS = @r ; 
+	my @listofdiffs ; 
+	my $finalprintstr = "";
+	my $finalprintstrpot = "";
+	foreach my $i (1..$SSS){
+	    my ($realdiff,$thr);
+		my $p1 = $r[$i -1];
+		my $p2 = $q[$i -1];
+		my $weight = $weights[$i -1];
+		my $absdiff = util_format_float(abs($p1 - $p2),3);
+
+		my $ABSREF = abs($p1);
+		my $ABSQUERY = abs($p2);
+		#$thr = 101 ;
+		$thr = 150 ;
+		
+		if($ABSREF > 400){
+		     $thr = 170  ;
+		}
+		elsif($ABSREF > 300){
+		     $thr = 150  ;
+		}
+		elsif ($ABSREF > 200){
+		     $thr = 125  ;
+		}
+		$thr = 75   if($ABSREF > 100 && $ABSREF < 131 && $ABSQUERY < $ABSREF);
+
+
+
+		if(abs($p1) < 99.8 && abs($p2) < 99.8){
+				$thr = "bothbelow100";
+			    $realdiff = 0 ; 
+		}
+		else{
+			$realdiff = $absdiff < $thr ? 0 : $absdiff*$weight ;
+		}
+
+	    my $diff = util_format_float(abs($p1 - $p2),3) * $weight;
+	    my $printstr =  " diff $i = $diff  abs($p1 - $p2) * $weight realdiff $realdiff thr = $thr  \n";
+		$finalprintstr = $finalprintstr . $printstr ;
+		$finalprintstrpot = $finalprintstrpot . " $p1 - $p2 ";
+	    print $logofh  $printstr;
+
+		if(defined $relaxpotentialcriteria){
+		    push @listofdiffs, $realdiff ;
+		}
+		else{
+		    die ;
+		    $maxdiff = $diff if($maxdiff < $diff);
+		}
+	}
+	push @diffstrs, $finalprintstr ;
+	push @diffstrspot, $finalprintstrpot ;
+
+	if(defined $relaxpotentialcriteria){
+        my @resultssorted = sort { $a <=> $b } @listofdiffs ; 
+	    $maxdiff = $resultssorted[$indexformax - 1];
+	}
+
+    #my $pot = $q[$refpotindex]; 
+	#my $diff = abs($refpot - $pot);
+	print $logofh  " ------- \n maxdiff $maxdiff \n";
+	push @potdiffs, $maxdiff ;
+}
+
+my $SS = @potdiffs ;
+my @results= ConfigPDB_ParseResultsFile($outfileQ,$howmany);
+my @resultsref= ConfigPDB_ParseResultsFile($outfileR,1);
+my $resultsref = shift @resultsref ;
+my @newScores ; 
+my $cnt = 0 ;
+foreach my $result (@results){
+    my @atoms = @{$result->{ATOMS}}; 
+
+    foreach my $atom (@atoms){
+       		my ($res,$num,$type) = split "/", $atom ;
+    		my $resObj = $pdbQ->GetResidueIdx($num);
+    		my ($a) = $pdbQ->GetAtomFromResidueAndType($num,$type) or die ;
+    		#push @atomlist, $a ;
+    }
+
+
+	my $diff = $potdiffs[$cnt];
+	my $apbsfactor = $diff ;
+    my $finalscore = $result->{SCORE} + $apbsfactor ; 
+	print "finalscore = $finalscore score = $result->{SCORE} , pot diff = $diff , apbsfactor = $apbsfactor \n";
+
+	my $x = {};
+	$x->{ABSSCORE} = util_format_float($result->{ABSSCORE} ,3);
+	$x->{OLDSCORE} = util_format_float($result->{SCORE} ,3);
+	$x->{NEWSCORE} = util_format_float($finalscore,3) ;
+	$x->{DIFFPRINTSTR} = $diffstrs[$cnt];
+	$x->{DIFFPRINTSTRPOT} = $diffstrspot[$cnt];
+	$x->{ATOMS} = \@atoms ;
+	$x->{INDEXINSRESULT} = $cnt ;
+	push @newScores , $x ;
+
+	$cnt++;
+}
+my @resultssorted = sort { $a->{NEWSCORE} <=> $b->{NEWSCORE} } @newScores ; 
+
+$cnt = 0 ;
+foreach my $result (@resultssorted){
+	$, = " ";
+    my @atoms = @{$result->{ATOMS}}; 
+	print  $logofh "$result->{NEWSCORE} .. NEWSCORE OLDSCORE = $result->{OLDSCORE} ( ABSSCORE= $result->{ABSSCORE} ) ( size = $size ) \n";
+	print  $logofh @atoms , "\n"; ;
+	util_printResult($ofh,$result->{NEWSCORE},$result->{ATOMS},$cnt);
+	if($cnt == 0){
+        my $bestfh = util_write("pymol.in");
+	    util_printResult($bestfh,$resultsref->{SCORE},$resultsref->{ATOMS},$cnt);
+	    util_printResult($bestfh,$result->{NEWSCORE},$result->{ATOMS},$cnt);
+		my $idx = $result->{INDEXINSRESULT};
+	    #print $logofh $result->{DIFFPRINTSTR};
+		my $potstr = $result->{DIFFPRINTSTRPOT};
+		my $SSS = $result->{DIFFPRINTSTR};
+        my $fffh = util_write($potdiff);
+		print $fffh "$potstr \n";
+		print $fffh "$SSS \n";
+		
+        util_printAndDo("$SRC/CSA/diff.distances.pl -out $disdiff -in1 $disr -in2 $disq -index $idx");
+		my $DD = "$query.$ref.distance.diff.txt";
+		my $PP = "$query.$ref.potential.diff.txt";
+        util_printAndDo("cp -f pot.diff $PP");
+        util_printAndDo("cp -f dis.diff $DD");
+        my $alignfilefh = util_write("$query.$ref.align.csh");
+		print $alignfilefh "alignProteins.pl -out oo -in pymol.in -p2 $query -p1 $ref \n";
+
+	}
+	    print $logofh $result->{DIFFPRINTSTR};
+	$cnt++;
+
+}
+
+util_printAndDo("cat $log") if($verbose);
+
+util_Banner("Merged scores in $PWD/../$diffpot");
+system("head -4 $PWD/../$diffpot");
+
+#my $cavitiesQ =  ConfigPDB_GetCavities_FPocket($query) ; 
+#my $cavitiesR =  ConfigPDB_GetCavities_FPocket($ref) ; 
+
+#util_printAndDo("$SRC/mergeScores.pl -pro $query -apbsdiff $diff -geom $outfileQ  ");
+
+#apbsParseOut.pl -out results.cons -in resultsfile -size 4
+sub util_RunAPBS{
+    my ($querypdb) = @_ ; 
+    #util_printAndDo("ln -s $APBSDIR/$querypdb . ");
+#return ;
+	my $tmpfile =  util_getTmpFile();
+    util_printAndDo("rm -f $tmpfile");
+    util_printAndDo("echo $querypdb > $tmpfile ");
+    util_printAndDo("$SRC/APBS/apbs.csh $tmpfile ");
+    #util_printAndDo("./$querypdb.csh");
+    util_printAndDo("rm -f $tmpfile");
+}
+
+sub util_RunFPocket{
+return ;
+    my ($querypdb) = @_ ; 
+	my $tmpfile =  util_getTmpFile();
+    util_printAndDo("rm -f $tmpfile");
+    util_printAndDo("echo $PDBDIR/$querypdb.pdb > $tmpfile ");
+    util_printAndDo("fpocket -F  $tmpfile");
+    util_printAndDo("rm -f $tmpfile");
+}
+
+
+

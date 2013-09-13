@@ -1,0 +1,456 @@
+#!/usr/bin/perl -w 
+use strict ;
+use PDB;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+use ConfigPDB;
+use MyGeom;
+use MyPymol;
+use Math::Geometry ;
+use Math::VectorReal qw(:all);  # Include O X Y Z axis constant vectors
+
+use AAConfig;
+
+my $aaconfig = new AAConfig("/home/sandeepc/aa.config");
+
+
+
+my $padding = 3 ; 
+my $DISTSURFACE = 1 ; 
+my $DOSURFACE = 0 ; 
+my $DISTATOMS   = 1 ; 
+my $BOUNDARYDELTA   = 1000 ; 
+my $RECALIBRATECOUNT= 100 ; 
+my $CNT1000 = 3 ;
+my $CNT10 = 4 ;
+
+use Time::HiRes qw( usleep ualarm gettimeofday tv_interval clock_gettime clock_getres  clock);
+use POSIX qw(floor);
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($ann,$config,$p1,$p2,$infile,$threshPD,$threshsign,$threshDist,$outfile,$readpotential,$which_tech,$listfile,$protein);
+my $DISTANCEWITHOUTSEQMATCH = 1 ;
+my $verbose = 1 ;
+
+my ($onlypolar,$radii,$before1,$before2);
+$readpotential = 1 ;
+GetOptions(
+            "which_tech=s"=>\$which_tech ,
+            "protein=s"=>\$protein ,
+            "onlypolar=i"=>\$onlypolar ,
+            "p1=s"=>\$p1 ,
+            "p2=s"=>\$p2 ,
+            "infile=s"=>\$infile ,
+            "listfile=s"=>\$listfile ,
+            "outfile=s"=>\$outfile ,
+            "ann=s"=>\$ann ,
+            "config=s"=>\$config,
+            "radii=i"=>\$radii ,
+           );
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+usage( "Need to give a output file name => option -outfile ") if(!defined $outfile);
+usage( "Need to give a config file name => option -config ") if(!defined $config);
+usage( "Need to give a p1 file name => option -p1 ") if(!defined $p1);
+
+
+
+my $ofh = util_write($outfile);
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC) = util_SetEnvVars();
+my $PWD = cwd;
+
+ConfigPDB_Init($config,$ofh);
+
+my @proteins ;
+push @proteins, $p1 ;
+
+my @info = util_ReadPdbs($PDBDIR,$APBSDIR,$readpotential,@proteins);
+my $pdb1 = $info[0]->{PDBOBJ};
+my $pdb2 = $info[1]->{PDBOBJ};
+my $pqr1 = $info[0]->{PQR};
+
+my @atoms1 = $pdb1->GetAtoms();
+my ($minx,$miny,$minz);
+my ($maxx,$maxy,$maxz);
+$minx = $miny = $minz = 100000 ;
+$maxx = $maxy = $maxz = -10000 ;
+foreach my $a1 (@atoms1){
+	my ($x,$y,$z) = $a1->Coords();
+	next if(!defined $x);
+	$maxx = $x if($x > $maxx); $maxy = $y if($y > $maxy); $maxz = $z if($z > $maxz);
+	$minx = $x if($x < $minx); $miny = $y if($y < $miny); $minz = $z if($z < $minz);
+}
+
+### round off 
+$maxx = int($maxx); $maxy = int($maxy); $maxz = int($maxz);
+$minx = int($minx); $miny = int($miny); $minz = int($minz);
+
+### pad 
+$maxx = $maxx + $padding ; $maxy = $maxy + $padding ; $maxz = $maxz + $padding ;
+$minx = $minx - $padding ; $miny = $miny - $padding ; $minz = $minz - $padding ;
+
+print "maxx maxy maxz\n";
+print "$maxx $maxy $maxz\n";
+print "minx miny minz\n";
+print "$minx $miny $minz\n";
+my $diffx = $maxx - $minx ; my $diffy = $maxy - $miny  ; my $diffz = $maxz - $minz  ;
+my $CNT = 0 ; 
+my $pseudoatom = new Atom();
+$pseudoatom->SetIdx(10000);
+
+
+my $gridresilution = 1 ; 
+my $CNTATOMS = 0 ; 
+
+my $allPointTable = {};
+my @allPointList  = ();
+my $boundary ={};
+my $tablefilled = {};
+
+
+##############################################################
+### Accumulate all the grid points and mark the boundaries ###
+##############################################################
+foreach my $p (0..$diffx){
+	my $X = $gridresilution * $p + $minx ; 
+    foreach my $q (0..$diffy){
+	    my $Y = $gridresilution * $q + $miny ; 
+        foreach my $r (0..$diffz){
+	        my $Z = $gridresilution * $r + $minz ; 
+	        my $str = MakeKeyFromCoord($X,$Y,$Z);
+			$allPointTable->{$str} = {};
+			push @allPointList,$str;
+			$CNT++ ;
+
+			## Mark the boundaries
+			if ($p eq 0 || $q eq 0 || $r eq 0 || $p eq $diffx || $q eq $diffy || $r eq $diffz){
+			    $boundary->{$str} = 1 ;
+			}
+        }
+    }
+}
+
+
+print "Assigning grid points to atoms - distance is $DISTATOMS\n";
+foreach my $a1 (@atoms1){
+	my ($x,$y,$z) = $a1->Coords();
+
+	next if(!defined $x); ## why would this ever happen?
+
+    $x = int($x); $y = int($y); $z = int($z);
+
+	my $Sx  = $x- 3 ; my $Ex  = $x + 3 ;
+	my $Sy  = $y- 3 ; my $Ey  = $y + 3 ;
+	my $Sz  = $z- 3 ; my $Ez  = $z + 3 ;
+	my $found = 0 ;
+
+    foreach my $p ($Sx..$Ex){
+        foreach my $q ($Sy..$Ey){
+            foreach my $r ($Sz..$Ez){
+                  $pseudoatom->SetCoords($p,$q,$r);
+				   my $d = $pseudoatom->Distance($a1) ;
+				   $d  = util_format_float($d,1);
+				   #print STDERR "$d $p $q $r \n";
+				   if($d < $DISTATOMS){  
+
+				   	   $found = 0 ;
+
+					   $CNTATOMS++ ;
+	                   my $str = MakeKeyFromCoord($p,$q,$r);
+					   die if(!defined $allPointTable->{$str});
+
+					   if(!defined $allPointTable->{$str}->{ATOMLIST}){
+					   	   $allPointTable->{$str}->{ATOMLIST} = [];
+					   }
+					   push @{$allPointTable->{$str}->{ATOMLIST}}, $a1 ;
+					   $tablefilled->{$str} = $a1 ;
+				   }
+				   last if($found);
+            }
+		    last if($found);
+        }
+		last if($found);
+    }
+
+
+    $found = 1 ;
+	if(!$found){
+		$a1->Print();
+		die ;
+	}
+}
+
+
+my $tablesurface  = {};
+if($DOSURFACE){
+    $tablesurface  = GetSurface($tablefilled,$DISTSURFACE) ; 
+}
+my $staticvalues = {};
+
+
+print "Computing static distances to boundary/atoms for each point\n";
+foreach my $k (@allPointList){
+	if(! exists $tablefilled->{$k} && ! exists $boundary->{$k}){
+	    my ($x,$y,$z) = MakeCoordFromKey($k);
+	    my $list = util_make_list($x,$y,$z);
+		my @ret ; 
+	    #params for MoveInOnedirection  --> ($k,$list,$idx,$dir,$ret) = @_ ; 
+		my $north = MoveInOnedirection($k,$list,0,0,\@ret);
+		my $south = MoveInOnedirection($k,$list,0,1,\@ret);
+		my $east = MoveInOnedirection($k,$list,1,1,\@ret);
+		my $west = MoveInOnedirection($k,$list,1,0,\@ret);
+		my $up = MoveInOnedirection($k,$list,2,1,\@ret);
+		my $down = MoveInOnedirection($k,$list,2,0,\@ret);
+		$staticvalues->{$k} = \@ret ; 
+		#print "$x $y $z $north $south $east $west $up $down \n";
+	}
+}
+
+print "recalibrating\n";
+my $recalibrated = {};
+foreach my $k (@allPointList){
+	if(! exists $tablefilled->{$k} && ! exists $boundary->{$k}){
+	    my ($x,$y,$z) = MakeCoordFromKey($k);
+	    my $list = util_make_list($x,$y,$z);
+		## todo remove values
+		my $north = RecalibrateValues($k,$list,0,0,1);
+		my $south = RecalibrateValues($k,$list,0,1,0);
+		my $east = RecalibrateValues($k,$list,1,1,3);
+		my $west = RecalibrateValues($k,$list,1,0,2);
+		my $up =   RecalibrateValues($k,$list,2,1,5);
+		my $down = RecalibrateValues($k,$list,2,0,4);
+	}
+}
+
+print "Figuring out which are cavities - cnt1000 should be greater than $CNT1000, cnt10 should be less than $CNT10 \n";
+my $cavity = {};
+foreach my $k (@allPointList){
+	if(! exists $tablefilled->{$k} && ! exists $boundary->{$k}){
+	   my @values = @{$recalibrated->{$k}};
+	   my $cnt1000 = 0 ; 
+	   my $cnt10 = 0 ; 
+	   foreach my $i (@values){
+	   	    $cnt1000++ if($i < 1000);
+	   	    $cnt10++ if($i < 10);
+	   }
+	   if($cnt1000 > $CNT1000 && $cnt10 < $CNT10 ){
+		   $cavity->{$k} = 1  
+	   }
+	}
+}
+
+
+print "Assigning cavities\n";
+my $numcavities = 0 ; 
+my $CAVITIES = {};
+foreach my $k (keys %{$cavity}){
+	if($cavity->{$k} eq 1 ){
+		my @atoms ;
+		my @ret ; 
+  
+        RecurseCreateCavity($k,\@ret,\@atoms);
+
+		$numcavities++ ; 
+
+		my $N  = @ret ; 
+		$CAVITIES->{$numcavities} = {};
+		$CAVITIES->{$numcavities}->{POINTS} = \@ret ; 
+		$CAVITIES->{$numcavities}->{ATOMS} = \@atoms ; 
+		$CAVITIES->{$numcavities}->{NUM} = $N ; 
+		if($N > 2){
+		     #print $ofh "$numcavities has size $N\n";
+		}
+	}
+}
+
+my @sorted = sort { $CAVITIES->{$a}->{NUM} <=> $CAVITIES->{$b}->{NUM} } (keys %{$CAVITIES});
+foreach my $numcavities (@sorted){    
+	my $N = $CAVITIES->{$numcavities}->{NUM} ;
+	my $atoms = $CAVITIES->{$numcavities}->{ATOMS} ;
+	my $done = {};
+	my $str = "";
+	foreach my $a (@{$atoms}){
+	    my $num = $a->GetResNum();
+	     $str = $str . " $num "  if(! exists $done->{$num});
+	     $done->{$num} = 1 ;
+        #$pseudoatom->SetCoords($x,$y,$z);
+		#my $list = util_make_list($pseudoatom);
+		#my ($junk,$neigh)  = $pdb1->GetNeighbourHoodAtom($list,2);
+		#foreach my $a (@{$neigh}){
+		    #my $num = $a->GetResNum();
+		#}
+	}
+	print $ofh "$numcavities has size $N - $str \n";
+}
+
+exit ; 
+###############  END ################################
+
+
+### this is quite a complicated function - so pay attention ### 
+### As we go up, we dont want to go down - just east, west , north and south
+sub RecalibrateValues{
+	my ($k,$list,$idx,$dir,$otherdir) = @_ ; 
+	my @l = @{$list} ; 
+	my @origvalues = @{$staticvalues->{$k}};
+	my $cnt = 0 ; 
+	
+	## this might as well have been while 1
+	while($cnt < $RECALIBRATECOUNT){
+		$cnt++ ; 
+		if($dir eq 0){
+	          $l[$idx] = $l[$idx] -1 ; 
+		 }
+		 else{
+	          $l[$idx] = $l[$idx] + 1 ; 
+		 }
+	     my ($x,$y,$z) = @l ;
+	     my $newkey = MakeKeyFromCoord($x,$y,$z);
+		 if(exists $boundary->{$newkey} || exists $tablefilled->{$newkey}){
+		     $recalibrated->{$k} = \@origvalues;
+		 	return ; 
+		 }
+		 my $values = $staticvalues->{$newkey};
+		 my @values = @{$values};
+		 foreach my $IDX (0..5){
+		 	next if($IDX eq $idx || $IDX eq $otherdir);
+			my $newval = $values[$IDX];
+			$origvalues[$IDX] = $origvalues[$IDX] + int($newval/$cnt) ; 
+		 }
+	}
+}
+
+sub MoveInOnedirection{
+	my ($k,$list,$idx,$dir,$ret) = @_ ; 
+	my @l = @{$list} ; 
+	my $cnt = 0 ; 
+	while(1){
+		if($dir eq 0){
+	          $l[$idx] = $l[$idx] -1 ; 
+		 }
+		 else{
+	          $l[$idx] = $l[$idx] + 1 ; 
+		 }
+
+	     my ($x,$y,$z) = @l ;
+		 #print "$x $y $z \n";
+	     my $newkey = MakeKeyFromCoord($x,$y,$z);
+		 if(exists $boundary->{$newkey}){
+		 	$cnt = $cnt+ $BOUNDARYDELTA ; 
+			push @{$ret}, $cnt ; 
+			return $cnt; 
+		 }
+		 elsif(exists $tablesurface->{$newkey} || exists $tablefilled->{$newkey}){
+			push @{$ret}, $cnt ; 
+		    return $cnt ; 
+		 }
+		 ## could make a move 
+		 $cnt++ ; 
+	}
+}
+
+
+
+sub MakeKeyFromCoord{
+	my ($X,$Y,$Z) = @_ ;
+	my $str = "$X#$Y#$Z";
+	return $str ;
+}
+sub MakeCoordFromKey{
+	my ($str) = @_ ;
+	my ($x,$y,$z) = split "#", $str ;
+	return ($x,$y,$z);
+}
+
+
+sub Filled{
+	my ($t,$coord) = @_ ; 
+	return 1 if(exists $t->{$coord}->{ATOMLIST});
+	return 0 ;
+}
+
+sub PointExists{
+	my ($t,$coord) = @_ ; 
+	return 1 if(exists $t->{$coord});
+	return 0 ;
+}
+
+
+
+
+sub usage{
+my ($msg) = @_ ;
+print $msg , "\n" ;
+print << "ENDOFUSAGE" ; 
+ENDOFUSAGE
+die ;
+}
+
+
+sub GetSurface{
+	my ($tf,$distsurface) = @_ ; 
+	my $ts = {};
+    foreach my $pointfilled (keys %{$tf}){
+		my @l = GetPointsAroundOnePoint($pointfilled,$distsurface);
+		my $atom = $tf->{$pointfilled} ; 
+		foreach my $k (@l){
+	        $ts->{$k} = $atom if(! exists $tf->{$k});
+		}
+    }
+    
+    #foreach my $k (keys %{$ts}){
+	    #print "surface $k \n";
+    #}
+	return $ts ; 
+}
+
+
+sub GetPointsAroundOnePoint{
+	    my ($k,$distsurface) = @_ ;
+	    my ($x,$y,$z) = MakeCoordFromKey($k);
+		my @l ; 
+	    my $Sx  = $x- $distsurface ; my $Ex  = $x + $distsurface ; 
+		my $Sy  = $y- $distsurface ; my $Ey  = $y + $distsurface ; 
+		my $Sz  = $z- $distsurface ; my $Ez  = $z + $distsurface ; 
+        foreach my $p ($Sx..$Ex){
+            foreach my $q ($Sy..$Ey){
+                foreach my $r ($Sz..$Ez){
+	                  push @l, MakeKeyFromCoord($p,$q,$r);
+			    }
+			}
+		}
+		return @l ;
+}
+
+sub RecurseCreateCavity{
+	my ($k,$ret,$atoms) = @_ ; 
+    die "Did not expect to get to the boundary" if(exists $boundary->{$k});
+	if(defined $cavity->{$k}){
+	   if($cavity->{$k} eq 1 ){
+	      $cavity->{$k} = 0 ; 
+		  push @{$ret}, $k ;
+	      my ($x,$y,$z) = MakeCoordFromKey($k);
+		  my $k1 = MakeKeyFromCoord($x+1,$y,$z);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+		  $k1 = MakeKeyFromCoord($x-1,$y,$z);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+		  $k1 = MakeKeyFromCoord($x,$y+1,$z);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+		  $k1 = MakeKeyFromCoord($x,$y-1,$z);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+		  $k1 = MakeKeyFromCoord($x,$y,$z+1);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+		  $k1 = MakeKeyFromCoord($x,$y,$z-1);
+		  RecurseCreateCavity($k1,$ret,$atoms);
+	    }
+    }		
+	else{
+		 if( exists $tablesurface->{$k}){
+		 	push @{$atoms} ,$tablesurface->{$k}; 
+		 }
+		 elsif (exists $tablefilled->{$k}){
+		 	push @{$atoms} ,$tablefilled->{$k}; 
+		 }
+		return ;
+	}
+}

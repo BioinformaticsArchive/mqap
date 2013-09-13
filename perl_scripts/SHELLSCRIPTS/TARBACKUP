@@ -1,0 +1,10 @@
+#!/bin/csh -f
+
+if($#argv != 1  ) then 
+  echo "Usage : ./generaterep.csh  <impl dir> <file_having_list_of_designs> <tech - eg altera> <mode> <dirfortech - eg stratixii> "
+  exit 
+endif 
+
+(tar -cvzf $1.tgz $1 ; mv -f $1.tgz ~/BACKUP)  > & ! /dev/null & 
+#tar -cvzf $1.tgz $1 
+

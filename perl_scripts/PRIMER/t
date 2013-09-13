@@ -1,0 +1,2 @@
+ 81.5 + 0.41 * $GCCount_percent - 675/$width - $mismatchpercent
+

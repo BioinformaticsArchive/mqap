@@ -1,0 +1,494 @@
+ 
+ 	setenv PDBDIR $PDBDIR/withmetal/
+	 
+parsePDB_SEQRES.pl -in ~/pdb_seqres.txt -type lactamase -cut 20 -out ooo -ty metall -or 0 -gr -dir METALLO
+parsePDB_SEQRES.pl -in ~/pdb_seqres.txt -type lactamase -cut 20 -out ooo -or 0 -dir METALLO -nty inh -nty metal -nty "Type II"
+# creates dir with each len
+parsePDB_SEQRES.pl -groupinfo -inf ~/pdb_seqres.txt -dir RRRR -out ooo -or 1 
+annotate.pl -in ~/pdb_seqres.txt -list ~/LISTS/list.CSA.all.80simi -out llllll -cutoff 100
+sortOnLength.pl -in ~/pdb_seqres.txt -list ~/LISTS/list.CSA.all.80simi -out llllll -cutoff 100
+
+
+
+
+queryPDB.pl -find -outf $i.out -pd $i -inconf outconf 
+queryPDB.pl -outf ooo -pdb1 $i.pdb -ann -inco inconf.$i -outconf outconf.$i
+
+
+parseCavity.pl -result super.out -cavi JIDMQ5281X.poc -out ooo
+
+getPDBSwithScore.pl *.out -out ooooooooo -cutoff 100
+
+
+
+
+
+checkForBetaAndNonBetaFromScores.pl -out ooooooooooooo -in ppp -beta ~/LIST.of.all.betalactmases -cutoff 10
+
+
+
+
+parseCSA.pl -in ~/CSA_2_2_12.dat 
+parseCSA.pl -in ~/CSA_2_2_12.dat  -specific
+extractCSAMotfs.pl -listp one -listm lllll -out ooo.tex
+
+
+Score.pl -pos /home/sandeepc/LIST.of.Beta.lactmase -neg /home/sandeepc/LIST.of.Non.Beta.lactmase -out outttttttt -we weightfile -train
+SVM.pl -out oooooooooo -svm sssss -pos ~/Bio/Data/Both/pos.list -negat ~/Bio/Data/Both/list.junk
+SVM.pl -out oooooooooo -svm sssss -single 1GCE
+
+
+twolists.pl -out ooo -in1 data.initial.ppp -in2 data.moreconstrained.ppp 
+
+extractHighestScoreFromAllOutFiles.pl -out ooo
+
+
+
+specVSsensitity.pl -lis data.maxconstrained -in ~/LISTS/list.bl.ClassACD -tag ttt
+
+
+
+
+
+
+python pdb2pqr.py --ff=AMBER ~/1G68.pdb 1G68
+
+
+
+## Mead 
+potential -epsin 1 -epsext 80 -blab2 1g68 > & ! result
+
+#delphi
+delphi.csh list
+$SRC/DELPHI/delphiExtractVolt.pl -out ooo -in 2G2U/fort.16 > llll
+$SRC/DELPHI/processVolt.pl -in llll -out ooo
+
+
+### APBS 
+pqr2csv $i.pqr $i.csv
+pdb2radiusMycenter $i.pdb 0 0 0
+multivalue 1g68.csv sandeep.dx ooo
+
+# do foreach 
+apbs.csh list ### creates .csh files
+
+apbsGetVolt.csh list $PWD/resultsfile $APBSDIR $RESULTDIR 0
+#apbsGetVolt.pl -protein $i -pqr $i.pqr -out ~/rrr -pot pot1.dx.atompot  -index 0 -resultfile $RESULTDIR/$i.pdb.out
+apbsGetVolt.pl -protein $i -pqr $APBSDIR/$i/$i.pqr -out ~/rrr -pot $APBSDIR/$i/pot1.dx.atompot -index 0 -resultfile EXTRACT.1M9C/$i/$i.pdb.out
+
+
+apbsParseOut.pl -out results.cons -in resultsfile -size 4 
+
+
+alignXto2AtomsForAPBS.pl -pdb 2G2U -out llll.pdb -list listfile -atom1 SER/70/OG -atom2 SER/130/OG 
+                                                -writein -npo 100 -nc 10 -nslices 10 
+
+
+apbs3Dplot.pl -out oo -lis listfile
+
+CLASP -ref 1A0J -qu 1GCE -motif ~/INCONF/inconf.1A0J.protease.trypsin -potindex 1 -howman 10 -refpot 2
+CLASP -ref 2G2U -qu 1FOF -motif ~/INCONF/inconf.bl.2G2U.4 -potindex 1 -howman 10 -refpot 0
+
+
+
+#### Bioperl
+ 
+# takes a list and does identity match, removing those with higher than 
+checkIdentity.pl -out xxx -simi 40  -list 
+checkIdentity.pl -out xxx -simi 40 -tab tab  -list 
+checkIdentity.pl -out ooo -list tmp -simi 40 -justone 1ALK
+runProfileAlign.pl -out ooo -id2 BL -id1 PBP -in2 ~/LISTS/list.bl.ClassACD.nonredundant -in1 ~/LISTS/list.bl.PBP.nonredundant
+
+
+
+Tikz.2d.pl -id XX -list list.files -xl "Protein Sequence Length" -yl "Time (mins)"
+
+findMotif.pl -pdb ~/PDBS/1GCE.pdb -out oo -a1 SER -a2 LYS -dis 3 -poten $APBSDIR/1GCE/pot1.dx.atompot -pqr $APBSDIR/1GCE/1GCE.pqr
+perl findMotif.extract.pl -in ~/report.motif
+
+run.ref.OnlistofQueries.csh list 1A0J ~/INCONF/inconf.1A0J.protease.trypsin 1 2
+
+
+
+
+
+
+3DMatch -checkse -outf oo -pdb 1A0J -inconf ANNOTATED/1A0J.outconf.annotated -res RESULTS/1A0J/1A0J.pdb.out
+3DMatch -ann -outf oo -pdb $i -inconf $i.outconf.annotated -outconf outconf
+
+
+
+
+
+
+./runRefQueryList.csh list.all list.renu RESULTS.BIGGROUPS/ ANNOTATED.BIGBROUP 
+extractRefQuertList.csh list.all list.restrictionenzymes EXTRACT.restrictionenzymes RESULTS.RESTRICTIONENZYMES/
+runRefExtractEasilyNamed.csh list.restrictionenzymes list.uvi
+
+generateScores.csh ANNOTATED/list.CSA.5 list.renu EXTRACT
+generateScores.wrap.csh list.renu EXTRACT
+printInfo.csh 1DL2 2XCQ EXTRACT
+
+
+
+pymol.2proteins.pl -out ooo.p1m -pdb1 1G68.rotated.pdb -pdb2 1AF4.rotated.pdb ; P ooo.p1m
+pymol.residues.pl -out pymol.2super.2dhm.pdb.p1m -pdb1 super.2dhm.pdb  --dist 59/OG --dist 69/NZ --dist 93/OG1 --dist 63/NZ  --expr 59SER --expr 69LYS --expr 93THR --expr 63LYS
+pymol.2oneprotein.pl -out ooo.p1m -pdb1 1A7U -in in
+pymol.movies.pl -pd 1A7U -outf oo -scri rrr.csh
+
+
+
+
+createCLASPinput.pl  -list $i -protein $i -out ooo -con ~/config.grp
+createCLASPinput.pl -out ooo -con $CONFIGGRP -lis 1D6M.CSA.outconf -pr 1D6M -how 8
+### use this 
+createCLASPinput.csh 2FZS
+
+
+
+runEachonAll.csh list ANNOTATED.specifi
+runOneonAll.csh list.2g2U kk RESULTS.BL.LATEST/ EXTRACT.bl.LATEST ANNOTATED 2G2U
+
+
+
+$SRC/CSA//runCSA.csh list.1M9C list.nonredundantandrestrictionenzymes RESULTS.nonredundant EXTRACT.nonredundant ANNOTATED/
+
+
+
+s ~/createinput.tex.csh
+
+processImages.csh list Results/
+$SRC/IMAGE/3DprocessAmba.pl -in ArcCentre2.tif -lis list -spec red -delta 0.314 -color white
+$SRC/IMAGE/3DprocessAmba.pl -in $i -lis list -spec red -delta 0.314 -color white -dist 1.5
+
+
+
+
+alignProteins.pl -out oo -in pymol.in -p1 1M9C -p2 1CWY
+
+
+
+./primer.pl -idx 15 -to SER -in seq -outfile ooo.csv
+multiple.pl -inf bola.seq -indices 19 -towhich LYS -indices 20 -tow SER -out ooo.csv
+
+
+
+webCreate.csh list.ref list.query Results.nonredundant/ Extract.nonredundant/ ANNOTATE/ SCORES.ALL/ "." "3"
+
+
+
+cat kkk | perl -ne ' { @l = split ; print "$l[1] $l[0] \n"; } '
+
+
+mirna.pl -out v1.out -in v1 -lis candidates -id v1
+
+
+countColonies.pl -out ooo -infi 4b.png -color black -csv out.csv > & ! log
+
+$SRC/IMAGE/countColonies.csh list CCC 10 white
+
+
+
+
+# remember to give an atom number, not residue number
+close2atom.pl -outf ppp -dist 3.6 -at 846 -pdb 2FEJ
+
+
+runGenScoresExtractEasilyNamed.csh list.proteases list.plc 3
+
+parseResultsData.pl -outfile oo -lis list.query
+
+ ANN list.proteases -html hhh -header "Active Site Motifs used to query unknown proteins: Click on PDB id to find out the best matches when this motif is queried in a list of proteins"
+
+
+
+./makelistforJS.pl -lis $CSA/list.all.org -out llll
+
+
+redopotential.pl 
+
+
+promiscuity.pl -out oo -in score.log ; sort -n oo > ! jjj ; Tikz.2d.pl -id JJ -lis lll
+
+s run.csh protein penicillinG UNK
+
+
+annotate.pl -in ~/pdb_seqres.txt -out mostpromi.html -list TT -html . -header1 "Some of the most promiscuous proteins as predicted by CLASP"
+
+s cpAPBS.csh 1GUM /media/AC789A76789A3F50/apbsruns/
+
+\rm papers.pdf ; pdftk *pdf cat output papers.pdf
+
+
+possiblefunctions.pl -list list.all ## works on the $pdb.matches generated 
+
+
+annotate.pl -in ~/pdb_seqres.txt -out mostpromi.html -list TT -html . -header1 "Some of the most promiscuous proteins as predicted by CLASP"
+
+ foreach i ( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 )
+ foreach i ( 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25  )
+
+
+
+    // split into sets too
+    processEC.pl -lis list.all -out ooo -howmany 20
+
+
+
+#This calls "processEC.pl -lis $list -out ooo -how $n" - and creates a list with n numbers of from each EC 
+# it is assumed that the ANNOTATE dir contains the dist file - and is correctly annotated for that dist
+runSimProm.csh <numberperEC> <dist> <list> 
+
+## first it concatanates all the score file after *scaling* them
+## this chooses only those that have more than sample size in the "scores.all" file
+runSimPromProcess.csh  <dist> samplesize
+
+
+## create dist ANNDIRS, the fasta  - and also generates the peptideinfo, 
+## does nothing if it exists - please check
+promSetup.csh list ANNDIR
+
+
+promiscuity.pl -in sorted.$n.csv -learn learn.dat -dist $n -fasta ../../ANNOTATE.$n ; svm_learn learn.dat
+
+pdftk A=document.pdf cat A1-22  output CLASP.pdf
+
+makecsvfromtex.pl -in table.most.tex
+
+
+percentAminoAcid.pl -pro 1AOJ -out ooo -inf $FASTADIR/1AOJ.ALL.Q08509.fasta -con ~/config.grp
+
+killmemhogger.csh apbs sandeepc 80
+
+
+promLearn.csh list score.5.scaled.popu ## creates peptideinfo,fasta per distance
+promLearntTable.pl  -out ooo -in LOG.Polar ## appends to ooo 
+$SRC/MISC/promLearn.pl -out info -sco score.5.scaled.popu -lis list ## this linear curves are a part of this file, which were generated by promLearntTable/pl
+
+### generates all outputs 
+$SRC/SHELLSCRIPTS/promiscuousTop.csh
+
+
+
+## choose peptideinfo which has residues less than given number
+promchoosePeptideInfo.pl -out OOO -number 20 -lis list
+promlinefit.csh 10000
+promproportion.csh 0.28 0.90 
+
+## this give the mean median and sd for all plots
+sandeepc@/home/sandeepc/promlearning/RESULTS.358.nonhomo60/Local> pwd
+/home/sandeepc/promlearning/RESULTS.358.nonhomo60/Local
+$SRC/SHELLSCRIPTS/promGetMeanMedianSd.csh
+
+
+## generates scores for distances from 1 - 15 A 
+/home/sandeepc/promlearning/RESULTS.358.nonhomo60/
+s getAllAccordingtoOnelist.csh list.sorted.5
+/home/sandeepc/TGZ/all2all/RESULTS.358.nonhomo60/FigForAll - has the fig
+
+
+
+PDBSEQRES/makeHashTable.pl -infile ~/pdb_seqres.txt -out ooo
+
+~/pk.pl -out oo -in "http://sound3.mp3pk.com/indianx/zamane_ko_dikhana_hai/zkdh1%28www.songs.pk%29.mp3" -repl zkdh
+
+wget 	http://www.rcsb.org/pdb/files/4EBB.pdb
+
+
+$SRC/PRISM/prismtop.pl -pdb 2G2U -outf ooo -dist 6 -wdis 4 -resnum 70 -delforpot 0 
+$SRC/PRISM/prismtop.pl -pdb 2G2U -outf ooo -dist 6 -wdis 4 -delforpot 0 -dont ## just one - resnum read from map
+
+
+getPDBModel1ChainA.csh 2CE7
+writeFasta.pl -pdb 3NZI
+writeFasta.pl -pdb 2AHN -muta mutate.directions
+
+
+
+
+### protease only
+./makepdblistonly.pl -out llllll -in list.proteases.annotated
+
+
+/home/sandeepc/DATA/TIKZ/Figsforinhi/Fig1
+s tt.csh 
+
+
+msms.pl -in data.1 -mass 13478 -del 0.05 -abu 2400
+
+
+
+convert celloutline1.jpg -black-threshold 90% 11.jpg
+convert celloutline1.jpg.final.png -pointsize 18 -draw "text 100,100 '4'" cv9.png
+convert -set delay 3 -colorspace GRAY -colors 16 -dispose 1 -loop 0 -scale 50% 1.png output.gif
+convert journal.pone.0028470.g001.tif -type Grayscale grey.png
+
+convert input.jpg -scale 900x300! -background black -gravity center -quality 92 zzz.jpg
+
+
+
+
+
+
+mencoder "mf://*.png" -mf fps=4 -o test.avi -ovc lavc -lavcopts vcodec=msmpeg4v2:vbitrate=800
+
+
+s ~/getbestmatchesforsingleref.csh 1B0F list.query # dont use this - junk
+s ~/createtable.csh list.query
+
+
+s ~/saveCLASPrun.csh list.1B0F list.plants ser195his57Asp102
+
+
+decaaf.pl -outf oo -in 1B0F.in -li list.plants -pr 1B0F
+decaaf.csh top list.number list.all
+decaafProcessList.pl -lis list.list.ordered.scores -outf oo -cutoff 1
+addResiduestoPymolIn.pl -out ooo -in pymol.in -lis ../../*not -p 1B0F
+
+
+grep -n 1CFE ./dir*/*.run/Extract.top.list.all/list.ordered
+
+
+blase.pl -in SERLYS -out ppppp -pr 1N9B
+selectProteinsFromFasta.pl -out ooo -lis LLL -pr p -in FASTA.ANN.5
+sortacc2list.pl -out ooo -inf SERLYS -lis list.all
+
+
+
+
+$SRC/ALIGN/alignMultProteins.pl -out ooo -in SERLYS -conf $CONFIGGRP -radii 9 -ann list.ann
+
+printPairwise.pl -out $i.results -c $CONFIGGRP -ra 222 -pr $i -in $i.pdb.out
+printAllPotential.pl -outf ooo -con $CONFIGGRP -pr 1N9B -res 70
+
+remove.pl -outf ooo -in PPP.1.sorted.pdb -lis remove
+
+
+frequencyDistribution.pl -out ooo -inf ppp -max 1 -del 0.1
+
+sortacc2list.pl -lis list.best.spec.base.sort -in PPP.0.5.sorted -out lll.1
+
+
+run findSurfaceResidues.py
+findSurfaceResidues doShow=True, cutoff=50
+
+
+$SRC/dockClosestAtoms.pl -outf ooo -p1 TRICLYICINHI.rotated -p2 3E2D.rotated -inf lll -max 6
+
+
+# mepp
+diffPairwise.pl -p1 3E2D -p2 3E2DAll4 -outf ooo -con $CONFIGGRP -rad 4 -threshpd 150 -tag All4 -onlypolar 1
+diffPairwise.pl -p1 2K1W -p2 2K1X -outf ooo -con $CONFIGGRP -rad 4 -thresh 150 
+diffPairwise.pl -p1 1SU4 -p2 1IWO -outf ooo -con $CONFIGGRP -rad 10 -thresh 150
+SRC/SHELLSCRIPTS/runAlldiffPairwise.csh 2K1W 2K1X 600 0 
+
+
+
+./bin/mustang-3.2.1  -F msf -f 
+
+
+
+
+fragmentcompare.pl -outfile results.out -in1 fly.ALL.fasta -in2 HUMAN.ALL.fasta -thresh 30 -onlyann 1  -size 50 -ide 0 
+fragmentcompare.pl -outfile results.out -in1 fly.ALL.fasta -in2 HUMAN.ALL.fasta -thresh 30 -onlyann 1  -size 50 -ide 0  -process
+
+
+$SRC/FRAGALWEB/makewebfilesFRAGAL.csh 30 50 aver 
+$SRC/SHELLSCRIPTS/fragmentcompare.csh fly.ALL.fasta HUMAN.ALL.fasta 30 50
+
+## creates the top level script
+$SRC/FRAGALWEB//runFragal.pl -outf kkk -in map -size 50 -workd /home/sandeepc/DATA/FRAGAL/HAT -gapop 25 -gapex 0.5
+~/reverseAB.pl -outf iiii -li LLL -dir QQ/
+
+
+dbfragrun.pl -outf kkk -in map -size 50 -workd /home/sandeepc/DATA/UNIPROT/ -gapop 10 -gapex 0.5 -list list.uniprot -genscripts -thre 600 
+## this generates the toplevel script
+dbfragrun.pl -outf kkk -in map -size 50 -workd /home/sandeepc/DATA/UNIPROT/ -gapop 10 -gapex 0.5 -list list.uniprot -thre 600 
+
+
+
+
+### print code for website - and copy all rundirs into ALLRUNS
+ff "mainlevel*" > ! list.mainlevel
+createweblinksfromMainlevelfile.pl -in list.mainlevel -runscri run.csh -wh HAT
+source ooo
+
+source ooo
+
+extractslicefromfasta.pl -out oooo -in Q28WW7.fasta  -start 670 -end 870
+extractslicefromfastaUniprot.pl -in A4QP73.ann -un A4QP73
+
+
+## splits pbd - say from mustang -into different chains
+splitpdb.pl
+w
+
+
+
+
+
+
+
+processGeno3D.pl -li list -out ooo -pre KKK
+
+### NAMD
+$SRC/NAMD/setupnewNamdlist.csh list.2O98-M0-C0
+processNamdLog.pl -out ooo -in runsimsolvate.log
+vmd -dispdev text -e writeframes.vmd
+tail -n 2 ` ff runsimsolvate.log `
+
+    printPairwiseManyPdbs.pl -out ooo -conf $CONFIGGRP -lis list.frames -in lll
+
+    $SRC/ALIGN/rmsdAllFrames.pl -outf oooo -list list.frames
+
+
+#pdBetweenCA.pl -outf xxx.$i -con $CONFIGGRP -pr $i -inf lll
+#pdJustCA.pl -outf xxx.$i -con $CONFIGGRP -list list
+escapist.pl -outf oooo -con $CONFIGGRP -lis list.nonredundant.337 -ignore
+pdResidues.csh list.443
+
+
+
+perl ~/addplot.pl -pre ../xxx -lis list.proteasesforPD -out ooo > ~/oooo
+
+$SRC/MISC/frequencyDistributionAbs.pl -outf freq -inf ooo -idx 1 -max 400 -delta 10 -start -400
+$SRC/MISC/frequencyDistributionAbs.pl -outf freq -idx 1 -max 180 -delta 10 -start 0  -inf 
+$SRC/MISC/freqdistAbs2Percent.pl -in $i -out prob.$i
+
+
+## output of pot.NATIVE_0....
+checkSwithces.pl -outf ooo -list list.F1
+
+
+$SRC/ALIGN/escapist.pl -outf oooo -con $CONFIGGRP -lis list -score pd.CB.score
+$SRC/ALIGN/distResidues.pl -outf oooo -con $CONFIGGRP -lis list -score pd.CB
+$SRC/ALIGN/specfpr.pl -out qqqq -li listin -idx 20
+
+
+
+## run this at the lowest level - else there is a problem 
+s $SRC/ALIGN/makedecoychanges.csh
+
+$SRC/SHELLSCRIPTS/decoysrunsinggle.csh list <tag>
+$SRC/SHELLSCRIPTS/decoysrunsingglelist.csh list <tag>
+$SRC/SHELLSCRIPTS/decoysrunsinggleAll.csh list
+
+
+$SRC/MISC/wrapperMF.pl -lis in -l1 list.1A0J -l2 list.2FEJ -outf runMF.csh
+
+scheduleprocess.pl -inf kkk -out erwe -thres 7
+
+
+head -2 ` ff "done.uniprot.sort"  ` | grep A | grep -v sort
+
+$SRC/MISC/cavity.pl -outf oooo -con $CONFIGGRP -p1 1AOJ
+$SRC/MISC/cavity.pl -outf oooo -con $CONFIGGRP -p1 1A0J -debu his57.atoms 
+$SRC/MISC/cavityClosest.pl -in ser195.atoms -lis coords.7 -outf llllkkfsf
+
+
+
+	ALIGN/getNeighforallresidues.pl -outf ooo -p1 2K1W -dis 5
+
+
+touch oooooo ; metalion.pl  -outf ooooo -dist 3 -me ca -p $i 
+

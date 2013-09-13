@@ -1,0 +1,326 @@
+#!/usr/bin/perl -w 
+use strict ;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+use ConfigPDB;
+use MyGeom;
+use PDB;
+
+use Time::HiRes qw( usleep ualarm gettimeofday tv_interval clock_gettime clock_getres  clock);
+use POSIX qw(floor);
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($scale,$population,$infile,$scores,$fastadir,$peptideinfo,$outfile,$id,$dist,$which_tech,$listfile,$protein);
+my (@expressions,$stats);
+my $howmany = 100000 ;
+my $verbose = 1 ;
+GetOptions(
+            "which_tech=s"=>\$which_tech ,
+            "scale"=>\$scale ,
+            "protein=s"=>\$protein ,
+            "scores=s"=>\$scores ,
+            "peptideinfo=s"=>\$peptideinfo ,
+            "id=s"=>\$id ,
+            "population=s"=>\$population ,
+            "infile=s"=>\$infile ,
+            "stats=i"=>\$stats ,
+            "listfile=s"=>\$listfile ,
+            "fastadir=s"=>\$fastadir ,
+            "outfile=s"=>\$outfile ,
+            "expr=s"=>\@expressions,
+            "howmany=i"=>\$howmany ,
+            "dist=i"=>\$dist ,
+           );
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+usage( "Need to give a output file name => option -outfile ") if(!defined $outfile);
+my $ofh = util_append($outfile);
+usage( "Need to dist => option -dist ") if(!defined $dist);
+usage( "Need to protein => option -protein ") if(!defined $protein);
+usage( "Need to peptideinfo => option -peptideinfo ") if(!defined $peptideinfo);
+usage( "Need to scores file=> option -scores ") if(!defined $scores);
+my $CNT = 0 ; 
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC) = util_SetEnvVars();
+my $PWD = cwd;
+
+
+#my @list= util_read_list_sentences($listfile);
+#my $list = {};
+#map { s/\s*//g ; $list->{$_} = 1 ; } @list ;
+#
+#foreach my $i (@list){
+	#print "$i\n";
+#}
+
+
+my $learnt = GetLearntTable();
+
+my $promValues = {};
+my $ifh = util_read($scores);
+while(<$ifh>){
+        chomp ;
+        next if(/^\s*$/);
+	    next if(/0, 0, 0, 0 , 0 ,/);
+	    next if(!/PROM score for/);
+	    my ($pdb,$ec) = (/PROM score for (.*) with EC (.*)/);
+	    s/PROM score for (.*) with EC (.*)//;
+	    my $level = util_getECID($ec,1);
+	    my ($threshhold, $ANNFILEDIST, $promIndex, $moonIndex, $TOTALMATCHES , $CNTOFMATCHES , $CNTOFNOTMATCHES, $cnt ,$LEN) = split "," , $_ ; 
+		$promValues->{$pdb} = $promIndex ;
+}
+die "Did not find score for protein $protein" if(! exists $promValues->{$protein});
+
+
+my @vals ; 
+my $pepinfo = {};
+util_readPeptideInfo($pepinfo,$protein,$peptideinfo);
+#CalcVal($protein,$dist,$pepinfo,"Molecular",\@vals);
+#CalcVal($protein,$dist,$pepinfo,"Acidic",\@vals);
+#CalcVal($protein,$dist,$pepinfo,"Basic",\@vals);
+CalcVal($protein,$dist,$pepinfo,"Polar",\@vals);
+
+my $mean = util_format_float(Math::NumberCruncher::Mean(\@vals) or warn "Mean not found",3) ;
+my $median = util_format_float(Math::NumberCruncher::Median(\@vals) or warn "Mean not found",3) ;
+my $sd = util_format_float(Math::NumberCruncher::StandardDeviation(\@vals) or warn "sd not found",3) ;
+print  "pdb $protein has  $mean $median $sd  \n";
+
+
+
+
+sub CalcVal{
+   my ($protein,$dist,$pepinfo,$WHAT,$vals) = @_ ; 
+   #my $ofnm = "output.$dist.$id.$WHAT.csv";
+   #my $FH = util_write($ofnm);
+   #print "processing $WHAT - output in $ofnm\n";
+   my $val = $pepinfo->{$protein}->{$WHAT};
+   print "$val $WHAT\n";
+   my $M = $learnt->{$WHAT}->{$dist}->{M};
+   my $C = $learnt->{$WHAT}->{$dist}->{C};
+   my $calc = ($val - $C)/$M  ;
+   print $ofh "what = $WHAT dist = $dist val = $val CALC = $calc  M = $M C = $C \n";
+   push @{$vals}, $calc ;
+   #close($FH);
+}
+
+
+sub GetLearntTable{
+my $learnt = {};
+$learnt->{Polar}->{1}->{M} = 27.2173 ; 
+$learnt->{Polar}->{1}->{C} = 74.1568 ; 
+$learnt->{Polar}->{2}->{M} = 27.4999 ; 
+$learnt->{Polar}->{2}->{C} = 73.6532 ; 
+$learnt->{Polar}->{3}->{M} = 30.8372 ; 
+$learnt->{Polar}->{3}->{C} = 67.5936 ; 
+$learnt->{Polar}->{4}->{M} = 27.1482 ; 
+$learnt->{Polar}->{4}->{C} = 52.2323 ; 
+$learnt->{Polar}->{5}->{M} = 20.1926 ; 
+$learnt->{Polar}->{5}->{C} = 46.3974 ; 
+$learnt->{Polar}->{6}->{M} = 17.5104 ; 
+$learnt->{Polar}->{6}->{C} = 42.5994 ; 
+$learnt->{Polar}->{7}->{M} = 15.6682 ; 
+$learnt->{Polar}->{7}->{C} = 40.4719 ; 
+$learnt->{Polar}->{8}->{M} = 13.2018 ; 
+$learnt->{Polar}->{8}->{C} = 39.0773 ; 
+$learnt->{Polar}->{9}->{M} = 11.1865 ; 
+$learnt->{Polar}->{9}->{C} = 38.2447 ; 
+$learnt->{Polar}->{10}->{M} = 9.33282 ; 
+$learnt->{Polar}->{10}->{C} = 37.6062 ; 
+$learnt->{Polar}->{11}->{M} = 7.39538 ; 
+$learnt->{Polar}->{11}->{C} = 37.1991 ; 
+$learnt->{Polar}->{12}->{M} = 6.15107 ; 
+$learnt->{Polar}->{12}->{C} = 36.9854 ; 
+$learnt->{Polar}->{13}->{M} = 4.4932 ; 
+$learnt->{Polar}->{13}->{C} = 37.5619 ; 
+$learnt->{Polar}->{14}->{M} = 3.27349 ; 
+$learnt->{Polar}->{14}->{C} = 37.9948 ; 
+$learnt->{Polar}->{15}->{M} = 2.16839 ; 
+$learnt->{Polar}->{15}->{C} = 38.4224 ; 
+$learnt->{Acidic}->{1}->{M} = 5.71924 ; 
+$learnt->{Acidic}->{1}->{C} = 28.0299 ; 
+$learnt->{Acidic}->{2}->{M} = 6.27004 ; 
+$learnt->{Acidic}->{2}->{C} = 27.6009 ; 
+$learnt->{Acidic}->{3}->{M} = 12.7639 ; 
+$learnt->{Acidic}->{3}->{C} = 23.0483 ; 
+$learnt->{Acidic}->{4}->{M} = 12.8157 ; 
+$learnt->{Acidic}->{4}->{C} = 13.9967 ; 
+$learnt->{Acidic}->{5}->{M} = 7.89725 ; 
+$learnt->{Acidic}->{5}->{C} = 11.6278 ; 
+$learnt->{Acidic}->{6}->{M} = 6.4699 ; 
+$learnt->{Acidic}->{6}->{C} = 10.132 ; 
+$learnt->{Acidic}->{7}->{M} = 6.15192 ; 
+$learnt->{Acidic}->{7}->{C} = 9.08136 ; 
+$learnt->{Acidic}->{8}->{M} = 5.9866 ; 
+$learnt->{Acidic}->{8}->{C} = 8.25742 ; 
+$learnt->{Acidic}->{9}->{M} = 4.77266 ; 
+$learnt->{Acidic}->{9}->{C} = 8.25792 ; 
+$learnt->{Acidic}->{10}->{M} = 3.68605 ; 
+$learnt->{Acidic}->{10}->{C} = 8.24183 ; 
+$learnt->{Acidic}->{11}->{M} = 2.81502 ; 
+$learnt->{Acidic}->{11}->{C} = 8.27825 ; 
+$learnt->{Acidic}->{12}->{M} = 2.41257 ; 
+$learnt->{Acidic}->{12}->{C} = 8.24697 ; 
+$learnt->{Acidic}->{13}->{M} = 2.43534 ; 
+$learnt->{Acidic}->{13}->{C} = 8.33918 ; 
+$learnt->{Acidic}->{14}->{M} = 1.89887 ; 
+$learnt->{Acidic}->{14}->{C} = 8.69865 ; 
+$learnt->{Acidic}->{15}->{M} = 1.66358 ; 
+$learnt->{Acidic}->{15}->{C} = 8.98923 ; 
+$learnt->{AcidBasic}->{1}->{M} = 43.8087 ; 
+$learnt->{AcidBasic}->{1}->{C} = 55.9941 ; 
+$learnt->{AcidBasic}->{2}->{M} = 44.7048 ; 
+$learnt->{AcidBasic}->{2}->{C} = 54.9659 ; 
+$learnt->{AcidBasic}->{3}->{M} = 41.8675 ; 
+$learnt->{AcidBasic}->{3}->{C} = 47.373 ; 
+$learnt->{AcidBasic}->{4}->{M} = 33.6022 ; 
+$learnt->{AcidBasic}->{4}->{C} = 31.4118 ; 
+$learnt->{AcidBasic}->{5}->{M} = 22.3973 ; 
+$learnt->{AcidBasic}->{5}->{C} = 25.554 ; 
+$learnt->{AcidBasic}->{6}->{M} = 19.1517 ; 
+$learnt->{AcidBasic}->{6}->{C} = 21.5377 ; 
+$learnt->{AcidBasic}->{7}->{M} = 15.8685 ; 
+$learnt->{AcidBasic}->{7}->{C} = 19.7356 ; 
+$learnt->{AcidBasic}->{8}->{M} = 13.7752 ; 
+$learnt->{AcidBasic}->{8}->{C} = 18.2497 ; 
+$learnt->{AcidBasic}->{9}->{M} = 11.831 ; 
+$learnt->{AcidBasic}->{9}->{C} = 17.9291 ; 
+$learnt->{AcidBasic}->{10}->{M} = 8.96701 ; 
+$learnt->{AcidBasic}->{10}->{C} = 17.8333 ; 
+$learnt->{AcidBasic}->{11}->{M} = 6.89034 ; 
+$learnt->{AcidBasic}->{11}->{C} = 17.8926 ; 
+$learnt->{AcidBasic}->{12}->{M} = 5.94846 ; 
+$learnt->{AcidBasic}->{12}->{C} = 17.7769 ; 
+$learnt->{AcidBasic}->{13}->{M} = 5.0326 ; 
+$learnt->{AcidBasic}->{13}->{C} = 18.2665 ; 
+$learnt->{AcidBasic}->{14}->{M} = 4.07448 ; 
+$learnt->{AcidBasic}->{14}->{C} = 18.833 ; 
+$learnt->{AcidBasic}->{15}->{M} = 3.44472 ; 
+$learnt->{AcidBasic}->{15}->{C} = 19.2884 ; 
+$learnt->{Polar}->{1}->{M} = 27.2173 ; 
+$learnt->{Polar}->{1}->{C} = 74.1568 ; 
+$learnt->{Polar}->{2}->{M} = 27.4999 ; 
+$learnt->{Polar}->{2}->{C} = 73.6532 ; 
+$learnt->{Polar}->{3}->{M} = 30.8372 ; 
+$learnt->{Polar}->{3}->{C} = 67.5936 ; 
+$learnt->{Polar}->{4}->{M} = 27.1482 ; 
+$learnt->{Polar}->{4}->{C} = 52.2323 ; 
+$learnt->{Polar}->{5}->{M} = 20.1926 ; 
+$learnt->{Polar}->{5}->{C} = 46.3974 ; 
+$learnt->{Polar}->{6}->{M} = 17.5104 ; 
+$learnt->{Polar}->{6}->{C} = 42.5994 ; 
+$learnt->{Polar}->{7}->{M} = 15.6682 ; 
+$learnt->{Polar}->{7}->{C} = 40.4719 ; 
+$learnt->{Polar}->{8}->{M} = 13.2018 ; 
+$learnt->{Polar}->{8}->{C} = 39.0773 ; 
+$learnt->{Polar}->{9}->{M} = 11.1865 ; 
+$learnt->{Polar}->{9}->{C} = 38.2447 ; 
+$learnt->{Polar}->{10}->{M} = 9.33282 ; 
+$learnt->{Polar}->{10}->{C} = 37.6062 ; 
+$learnt->{Polar}->{11}->{M} = 7.39538 ; 
+$learnt->{Polar}->{11}->{C} = 37.1991 ; 
+$learnt->{Polar}->{12}->{M} = 6.15107 ; 
+$learnt->{Polar}->{12}->{C} = 36.9854 ; 
+$learnt->{Polar}->{13}->{M} = 4.4932 ; 
+$learnt->{Polar}->{13}->{C} = 37.5619 ; 
+$learnt->{Polar}->{14}->{M} = 3.27349 ; 
+$learnt->{Polar}->{14}->{C} = 37.9948 ; 
+$learnt->{Polar}->{15}->{M} = 2.16839 ; 
+$learnt->{Polar}->{15}->{C} = 38.4224 ; 
+$learnt->{Polar}->{1}->{M} = 27.2173 ; 
+$learnt->{Polar}->{1}->{C} = 74.1568 ; 
+$learnt->{Polar}->{2}->{M} = 27.4999 ; 
+$learnt->{Polar}->{2}->{C} = 73.6532 ; 
+$learnt->{Polar}->{3}->{M} = 30.8372 ; 
+$learnt->{Polar}->{3}->{C} = 67.5936 ; 
+$learnt->{Polar}->{4}->{M} = 27.1482 ; 
+$learnt->{Polar}->{4}->{C} = 52.2323 ; 
+$learnt->{Polar}->{5}->{M} = 20.1926 ; 
+$learnt->{Polar}->{5}->{C} = 46.3974 ; 
+$learnt->{Polar}->{6}->{M} = 17.5104 ; 
+$learnt->{Polar}->{6}->{C} = 42.5994 ; 
+$learnt->{Polar}->{7}->{M} = 15.6682 ; 
+$learnt->{Polar}->{7}->{C} = 40.4719 ; 
+$learnt->{Polar}->{8}->{M} = 13.2018 ; 
+$learnt->{Polar}->{8}->{C} = 39.0773 ; 
+$learnt->{Polar}->{9}->{M} = 11.1865 ; 
+$learnt->{Polar}->{9}->{C} = 38.2447 ; 
+$learnt->{Polar}->{10}->{M} = 9.33282 ; 
+$learnt->{Polar}->{10}->{C} = 37.6062 ; 
+$learnt->{Polar}->{11}->{M} = 7.39538 ; 
+$learnt->{Polar}->{11}->{C} = 37.1991 ; 
+$learnt->{Polar}->{12}->{M} = 6.15107 ; 
+$learnt->{Polar}->{12}->{C} = 36.9854 ; 
+$learnt->{Polar}->{13}->{M} = 4.4932 ; 
+$learnt->{Polar}->{13}->{C} = 37.5619 ; 
+$learnt->{Polar}->{14}->{M} = 3.27349 ; 
+$learnt->{Polar}->{14}->{C} = 37.9948 ; 
+$learnt->{Polar}->{15}->{M} = 2.16839 ; 
+$learnt->{Polar}->{15}->{C} = 38.4224 ; 
+$learnt->{Polar}->{1}->{M} = 27.2173 ; 
+$learnt->{Polar}->{1}->{C} = 74.1568 ; 
+$learnt->{Polar}->{2}->{M} = 27.4999 ; 
+$learnt->{Polar}->{2}->{C} = 73.6532 ; 
+$learnt->{Polar}->{3}->{M} = 30.8372 ; 
+$learnt->{Polar}->{3}->{C} = 67.5936 ; 
+$learnt->{Polar}->{4}->{M} = 27.1482 ; 
+$learnt->{Polar}->{4}->{C} = 52.2323 ; 
+$learnt->{Polar}->{5}->{M} = 20.1926 ; 
+$learnt->{Polar}->{5}->{C} = 46.3974 ; 
+$learnt->{Polar}->{6}->{M} = 17.5104 ; 
+$learnt->{Polar}->{6}->{C} = 42.5994 ; 
+$learnt->{Polar}->{7}->{M} = 15.6682 ; 
+$learnt->{Polar}->{7}->{C} = 40.4719 ; 
+$learnt->{Polar}->{8}->{M} = 13.2018 ; 
+$learnt->{Polar}->{8}->{C} = 39.0773 ; 
+$learnt->{Polar}->{9}->{M} = 11.1865 ; 
+$learnt->{Polar}->{9}->{C} = 38.2447 ; 
+$learnt->{Polar}->{10}->{M} = 9.33282 ; 
+$learnt->{Polar}->{10}->{C} = 37.6062 ; 
+$learnt->{Polar}->{11}->{M} = 7.39538 ; 
+$learnt->{Polar}->{11}->{C} = 37.1991 ; 
+$learnt->{Polar}->{12}->{M} = 6.15107 ; 
+$learnt->{Polar}->{12}->{C} = 36.9854 ; 
+$learnt->{Polar}->{13}->{M} = 4.4932 ; 
+$learnt->{Polar}->{13}->{C} = 37.5619 ; 
+$learnt->{Polar}->{14}->{M} = 3.27349 ; 
+$learnt->{Polar}->{14}->{C} = 37.9948 ; 
+$learnt->{Polar}->{15}->{M} = 2.16839 ; 
+$learnt->{Polar}->{15}->{C} = 38.4224 ; 
+$learnt->{Basic}->{1}->{M} = 38.0895 ; 
+$learnt->{Basic}->{1}->{C} = 27.9642 ; 
+$learnt->{Basic}->{2}->{M} = 38.4348 ; 
+$learnt->{Basic}->{2}->{C} = 27.365 ; 
+$learnt->{Basic}->{3}->{M} = 29.1036 ; 
+$learnt->{Basic}->{3}->{C} = 24.3246 ; 
+$learnt->{Basic}->{4}->{M} = 20.7865 ; 
+$learnt->{Basic}->{4}->{C} = 17.4151 ; 
+$learnt->{Basic}->{5}->{M} = 14.5001 ; 
+$learnt->{Basic}->{5}->{C} = 13.9262 ; 
+$learnt->{Basic}->{6}->{M} = 12.6818 ; 
+$learnt->{Basic}->{6}->{C} = 11.4058 ; 
+$learnt->{Basic}->{7}->{M} = 9.71663 ; 
+$learnt->{Basic}->{7}->{C} = 10.6542 ; 
+$learnt->{Basic}->{8}->{M} = 7.78858 ; 
+$learnt->{Basic}->{8}->{C} = 9.99227 ; 
+$learnt->{Basic}->{9}->{M} = 7.0583 ; 
+$learnt->{Basic}->{9}->{C} = 9.67122 ; 
+$learnt->{Basic}->{10}->{M} = 5.28096 ; 
+$learnt->{Basic}->{10}->{C} = 9.59143 ; 
+$learnt->{Basic}->{11}->{M} = 4.07532 ; 
+$learnt->{Basic}->{11}->{C} = 9.61433 ; 
+$learnt->{Basic}->{12}->{M} = 3.53589 ; 
+$learnt->{Basic}->{12}->{C} = 9.52997 ; 
+$learnt->{Basic}->{13}->{M} = 2.59726 ; 
+$learnt->{Basic}->{13}->{C} = 9.92736 ; 
+$learnt->{Basic}->{14}->{M} = 2.17562 ; 
+$learnt->{Basic}->{14}->{C} = 10.1344 ; 
+$learnt->{Basic}->{15}->{M} = 1.78113 ; 
+$learnt->{Basic}->{15}->{C} = 10.2992 ; 
+return $learnt ;
+}
+sub usage{
+    my ($msg) = @_ ;
+    print $msg , "\n" ; 
+print << "ENDOFUSAGE" ; 
+ENDOFUSAGE
+    die ;
+}

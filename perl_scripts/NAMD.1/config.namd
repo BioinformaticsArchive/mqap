@@ -1,0 +1,5 @@
+PDB = 1GCE ;  # pdb 
+PDBNoH = 1GCENoH ;  # pdb 
+PDBALIAS = 1GCE ; 
+PARAMFILE = paramfile.inp
+PDBPSF = 1GCEpsf

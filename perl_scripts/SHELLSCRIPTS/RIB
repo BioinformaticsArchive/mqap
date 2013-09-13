@@ -1,0 +1,8 @@
+#!/bin/csh -f
+
+if($#argv != 1  ) then 
+  echo "Usage :  RIB - run in background file name < file nae>
+  exit 
+endif 
+
+source  $1  > & ! /dev/null & 

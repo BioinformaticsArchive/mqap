@@ -1,0 +1,177 @@
+LOCUS       NM_173283               1745 bp    mRNA    linear   VRT 02-MAY-2010
+DEFINITION  Danio rerio insulin-like growth factor binding protein 1a
+            (igfbp1a), mRNA.
+ACCESSION   NM_173283
+VERSION     NM_173283.3  GI:42734413
+KEYWORDS    .
+SOURCE      Danio rerio (zebrafish)
+  ORGANISM  Danio rerio
+            Eukaryota; Metazoa; Chordata; Craniata; Vertebrata; Euteleostomi;
+            Actinopterygii; Neopterygii; Teleostei; Ostariophysi;
+            Cypriniformes; Cyprinidae; Danio.
+REFERENCE   1  (bases 1 to 1745)
+  AUTHORS   Jima,D.D., Shah,R.N., Orcutt,T.M., Joshi,D., Law,J.M.,
+            Litman,G.W., Trede,N.S. and Yoder,J.A.
+  TITLE     Enhanced transcription of complement and coagulation genes in the
+            absence of adaptive immunity
+  JOURNAL   Mol. Immunol. 46 (7), 1505-1516 (2009)
+   PUBMED   19200601
+REFERENCE   2  (bases 1 to 1745)
+  AUTHORS   Rodgers,B.D., Roalson,E.H. and Thompson,C.
+  TITLE     Phylogenetic analysis of the insulin-like growth factor binding
+            protein (IGFBP) and IGFBP-related protein gene families
+  JOURNAL   Gen. Comp. Endocrinol. 155 (1), 201-207 (2008)
+   PUBMED   17537438
+REFERENCE   3  (bases 1 to 1745)
+  AUTHORS   Marques,I.J., Leito,J.T., Spaink,H.P., Testerink,J., Jaspers,R.T.,
+            Witte,F., van den Berg,S. and Bagowski,C.P.
+  TITLE     Transcriptome analysis of the response to chronic constant hypoxia
+            in zebrafish hearts
+  JOURNAL   J. Comp. Physiol. B, Biochem. Syst. Environ. Physiol. 178 (1),
+            77-92 (2008)
+   PUBMED   17828398
+REFERENCE   4  (bases 1 to 1745)
+  AUTHORS   Sundstrom,G., Larsson,T.A. and Larhammar,D.
+  TITLE     Phylogenetic and chromosomal analyses of multiple gene families
+            syntenic with vertebrate Hox clusters
+  JOURNAL   BMC Evol. Biol. 8, 254 (2008)
+   PUBMED   18803835
+  REMARK    Publication Status: Online-Only
+REFERENCE   5  (bases 1 to 1745)
+  AUTHORS   Kamei,H., Lu,L., Jiao,S., Li,Y., Gyrup,C., Laursen,L.S., Oxvig,C.,
+            Zhou,J. and Duan,C.
+  TITLE     Duplication and diversification of the hypoxia-inducible IGFBP-1
+            gene in zebrafish
+  JOURNAL   PLoS ONE 3 (8), E3091 (2008)
+   PUBMED   18769480
+  REMARK    GeneRIF: TGE duplicated IGFBP-1 may provide additional flexibility
+            in fine-tuning insulin-like growth factor signaling activities
+            under hypoxia and other catabolic conditions. Publication Status:
+            Online-Only
+REFERENCE   6  (bases 1 to 1745)
+  AUTHORS   Kajimura,S., Aida,K. and Duan,C.
+  TITLE     Understanding hypoxia-induced gene expression in early
+            development: in vitro and in vivo analysis of hypoxia-inducible
+            factor 1-regulated zebra fish insulin-like growth factor binding
+            protein 1 gene expression
+  JOURNAL   Mol. Cell. Biol. 26 (3), 1142-1155 (2006)
+   PUBMED   16428465
+  REMARK    GeneRIF: HIF-1 mediates hypoxia-induced IGFBP-1 gene expression in
+            early development by selectively interacting with the hypoxia
+            response elements and its adjacent HIF-1 ancillary sequence.
+REFERENCE   7  (bases 1 to 1745)
+  AUTHORS   Woods,I.G., Wilson,C., Friedlander,B., Chang,P., Reyes,D.K.,
+            Nix,R., Kelly,P.D., Chu,F., Postlethwait,J.H. and Talbot,W.S.
+  TITLE     The zebrafish gene map defines ancestral vertebrate chromosomes
+  JOURNAL   Genome Res. 15 (9), 1307-1314 (2005)
+   PUBMED   16109975
+REFERENCE   8  (bases 1 to 1745)
+  AUTHORS   Kajimura,S., Aida,K. and Duan,C.
+  TITLE     Insulin-like growth factor-binding protein-1 (IGFBP-1) mediates
+            hypoxia-induced embryonic growth and developmental retardation
+  JOURNAL   Proc. Natl. Acad. Sci. U.S.A. 102 (4), 1240-1245 (2005)
+   PUBMED   15644436
+REFERENCE   9  (bases 1 to 1745)
+  AUTHORS   Wood,A.W., Duan,C. and Bern,H.A.
+  TITLE     Insulin-like growth factor signaling in fish
+  JOURNAL   Int. Rev. Cytol. 243, 215-285 (2005)
+   PUBMED   15797461
+  REMARK    GeneRIF: The insulin-like growth factor binding protein 1
+            (29-31kDa)is similarities to mammalian. Review article
+REFERENCE   10  (bases 1 to 1745)
+  AUTHORS   Maures,T.J. and Duan,C.
+  TITLE     Structure, developmental expression, and physiological regulation
+            of zebrafish IGF binding protein-1
+  JOURNAL   Endocrinology 143 (7), 2722-2731 (2002)
+   PUBMED   12072407
+COMMENT     PROVISIONAL REFSEQ: This record has not yet been subject to final
+            NCBI review. The reference sequence was derived from BC058296.1.
+            On Feb 22, 2004 this sequence version replaced gi:40254670.
+            Publication Note: This RefSeq record includes a subset of the
+            publications that are available for this gene. Please see the
+            Entrez Gene record to access additional publications.
+FEATURES             Location/Qualifiers
+     source          1..1745
+                     /mol_type="mRNA"
+                     /map="20"
+                     /db_xref="taxon:7955"
+                     /chromosome="20"
+                     /organism="Danio rerio"
+     gene            1..1745
+                     /db_xref="GeneID:317638"
+                     /db_xref="ZFIN:ZDB-GENE-021231-1"
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /gene="igfbp1a"
+                     /note="insulin-like growth factor binding protein 1a"
+     CDS             75..863
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /protein_id="NP_775390.2"
+                     /gene="igfbp1a"
+                     /note="insulin-like growth factor binding protein-1;
+                     insulin-like growth factor binding protein 1"
+                     /db_xref="GI:40254671"
+                     /db_xref="GeneID:317638"
+                     /db_xref="ZFIN:ZDB-GENE-021231-1"
+                     /codon_start=1
+                     /product="insulin-like growth factor binding protein 1a"
+                     /translation="MNRLLLNFFWVAAFSALLAAPGLRASPVVGQEPIRCAPCSPERL
+                     AECPAVDAGCEEVLREPGCGCCLACALKRGDPCGIYTAPCGSGLRCLPKPGEARPLHA
+                     LTRGQAVCTESPEPNHSQSETAPDHPESHNGATAVNEGSSTVFVTGHGKPFDPRIITN
+                     KESMKAKVNAIRKKLVEQGPCHIELQTALDKITKSQQKLGDKLTRFYLPNCDKHGLYK
+                     IKQCESSLDGQRGKCWCVSSWNGKKIPGSSDLPADAECPEELNH"
+     misc_feature    174..407
+                     /db_xref="CDD:154928"
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /gene="igfbp1a"
+                     /note="Insulin-like growth factor binding protein;
+                     Region: IGFBP; cl02472"
+     misc_feature    612..842
+                     /db_xref="CDD:29153"
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /gene="igfbp1a"
+                     /note="Thyroglobulin type I repeats.; The N-terminal
+                     region of human thyroglobulin contains 11 type-1 repeats
+                     TY repeats are proposed to be inhibitors of cysteine
+                     proteases; Region: TY; cd00191"
+     misc_feature    order(627..629,690..692,744..746,768..770)
+                     /db_xref="CDD:29153"
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /gene="igfbp1a"
+                     /note="protease interaction site; other site"
+     STS             478..714
+                     /db_xref="UniSTS:189872"
+                     /gene_synonym="cb656; IGFBP-1; igfbp1"
+                     /gene="igfbp1a"
+                     /standard_name="fb04h01.y1"
+ORIGIN      
+        1 cgcaaagaca gtgaggaact ccacgtttca cttcatttat ttatttatct atttattctg
+       61 agccgtgctt tgggatgaac agactgcttc tgaacttctt ctgggtggca gcattcagcg
+      121 cactcctcgc cgcgccgggg ctccgggctt ctccagtggt cgggcaggaa ccgatccgct
+      181 gcgctccgtg ctccccggag cggcttgccg agtgtccggc ggtggatgcc ggctgtgagg
+      241 aggtgcttcg agagccgggc tgcggctgct gcctcgcctg tgcgttgaag agaggtgacc
+      301 cgtgcgggat ctacactgcg ccctgcggct ccgggctgcg ctgcttgccg aaaccgggag
+      361 aagcccgacc cctgcacgcg ctcacccggg gacaagcggt gtgcaccgag agccccgagc
+      421 ctaaccacag ccaaagcgag acagcaccag atcatccgga gtctcataac ggggcgacgg
+      481 cagtcaatga aggcagctcc accgtgttcg tgaccgggca cggaaagcca ttcgacccgc
+      541 ggatcatcac taataaagag agcatgaagg ccaaagtcaa cgcgatacgc aagaaactgg
+      601 tggaacaggg tccctgtcat atcgaactcc agacagccct tgacaagatc actaaatcac
+      661 agcagaaact gggagacaaa ttgaccagat tctacctgcc aaactgcgac aaacacggcc
+      721 tgtacaaaat caaacagtgc gaatcatctc tagatggtca gagggggaag tgttggtgtg
+      781 tgtcatcctg gaatgggaag aagattcctg gatcaagtga cctgccagca gatgccgagt
+      841 gtcccgagga actcaaccac tgatccgtca cacacatgta tataacacca ctgatttttt
+      901 ttttatcatt atatatattt ttgaaattat ttatttattg ttagtggtga tatttaattc
+      961 aggtacactg tttttgattg gtaaactctc caaaaaaaaa aaaagaaaaa aaatgaaaaa
+     1021 gaaatctatt tttctgtaaa gaaacgaata tgtattttac atgaagtacc cacacgttat
+     1081 ttatttaaat gaatgtattc atttccatat ctggataaga ctatttattc cctatgcctt
+     1141 atacatattt ttgtatggtg taaatctgta tatttgcttt atatctctaa cttccttcag
+     1201 gctcgctttg ttggaaagga atgaaatgga aaaaaagcac tgcatgacca aacctgtttg
+     1261 tcactgtccg tacattgcca tatttttata ctgtatatgt ttttgtatta ttttatattt
+     1321 tactaatgat tttctttatg tgtaatgaat agattgactt tttactttca aaagtattgt
+     1381 ctcttcacag cttttgaaac gggtaactgc ctgttcctac ctctgccttc taagttgtct
+     1441 tttattttaa atcaagtggg cttattatgt ctgtaaattg tcttgtgtta tcaaatcgat
+     1501 catatttgta ttgtctacat actgtggtaa atgtgttttg tttaaagcga ttcaatgtct
+     1561 acactgagaa aaaaagagac gttgcctcac tccaaagctc atgtgtatca tatatttttc
+     1621 atgatttgta attgtaagtt gttgtgggta aaaaaaacaa actatttaat aaatcatctt
+     1681 tgcaagcaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa
+     1741 aaaaa
+//

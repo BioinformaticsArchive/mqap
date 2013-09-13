@@ -1,0 +1,30 @@
+vi blase.pl
+mv blase.pl $SRC/MISC/
+mv run.pl blaseNeedle.pl
+mv blaseNeedle.pl ~/
+~/blaseNeedle.pl
+blase.pl -in SERLYS -out ppppp -pr 1N9B
+vi list.blase
+~/blaseNeedle.pl -lis list.blase
+vi ~/blaseNeedle.pl
+vi $SRC/MISC/blaseNeedle.pl
+vi $SRC/MISC/blase.pl
+cp ~/tmpl.pl blaseAnnotateFasta.pl
+blaseAnnotateFasta.pl
+blaseAnnotateFasta.pl -outf ooo
+blaseAnnotateFasta.pl -outf ooo -in FF A B C PBP ST
+vi blaseAnnotateFasta.pl
+blaseAnnotateFasta.pl -outf ooo -in FF A C D PBP ST
+mv runall.csh blaserunall.csh
+blaseAnnotateFasta.pl -outf FASTA.ANN -in ALL.fasta A C D PBP ST
+s blaserunall.csh
+vi blaserunall.csh
+$SRC/blaserunall.csh
+mv blase* BLASE
+echo $PATH | grep -i blase
+type blaseRunmotifs.csh
+type blaserunall.csh
+vi /home/sandeepc/Bio/Code/perl_scripts/perl_scripts//BLASE/blaserunall.csh
+vi blaseRunmotifs.csh
+blaserunall.csh
+vi $SRC/BLASE/blaserunall.csh

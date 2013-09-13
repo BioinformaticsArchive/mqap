@@ -1,0 +1,422 @@
+#!/usr/bin/perl -w 
+use strict ;
+use PDB;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+use ConfigPDB;
+use MyGeom;
+use MyPymol;
+use Math::Geometry ;
+use Math::VectorReal qw(:all);  # Include O X Y Z axis constant vectors
+
+use AAConfig;
+
+my $aaconfig = new AAConfig("/home/sandeepc/aa.config");
+
+
+
+my $DIFF2IGNORE = 1  ;
+
+use Time::HiRes qw( usleep ualarm gettimeofday tv_interval clock_gettime clock_getres  clock);
+use POSIX qw(floor);
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($ann,$config,$p1,$p2,$infile,$threshPD,$threshsign,$threshDist,$outfile,$readpotential,$which_tech,$listfile,$protein);
+my $DISTANCEWITHOUTSEQMATCH = 1 ;
+my $verbose = 1 ;
+
+$threshPD = 150 ;
+$threshsign = 150 ;
+$threshDist = 3 ;
+my ($onlypolar,$radii,$before1,$before2);
+$readpotential = 1 ;
+GetOptions(
+            "which_tech=s"=>\$which_tech ,
+            "protein=s"=>\$protein ,
+            "onlypolar=i"=>\$onlypolar ,
+            "p1=s"=>\$p1 ,
+            "p2=s"=>\$p2 ,
+            "infile=s"=>\$infile ,
+            "listfile=s"=>\$listfile ,
+            "outfile=s"=>\$outfile ,
+            "ann=s"=>\$ann ,
+            "config=s"=>\$config,
+            "radii=i"=>\$radii ,
+            "threshPD=i"=>\$threshPD ,
+            "threshsign=i"=>\$threshsign ,
+            "diff2ignore=i"=>\$DIFF2IGNORE ,
+           );
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+usage( "Need to give a output file name => option -outfile ") if(!defined $outfile);
+usage( "Need to give a config file name => option -config ") if(!defined $config);
+usage( "Need to give a radii file name => option -radii ") if(!defined $radii);
+
+
+
+my $ofh = util_write($outfile);
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC) = util_SetEnvVars();
+my $PWD = cwd;
+
+ConfigPDB_Init($config,$ofh);
+
+my @proteins ;
+push @proteins, $p1 ;
+
+my @info = util_ReadPdbs($PDBDIR,$APBSDIR,$readpotential,@proteins);
+my $pdb1 = $info[0]->{PDBOBJ};
+my $pdb2 = $info[1]->{PDBOBJ};
+my $pqr1 = $info[0]->{PQR};
+
+my @atoms1 = $pdb1->GetAtoms();
+my ($minx,$miny,$minz);
+my ($maxx,$maxy,$maxz);
+$minx = $miny = $minz = 100000 ;
+$maxx = $maxy = $maxz = -10000 ;
+foreach my $a1 (@atoms1){
+	my ($x,$y,$z) = $a1->Coords();
+	next if(!defined $x);
+	$maxx = $x if($x > $maxx); $maxy = $y if($y > $maxy); $maxz = $z if($z > $maxz);
+	$minx = $x if($x < $minx); $miny = $y if($y < $miny); $minz = $z if($z < $minz);
+}
+
+$maxx = int($maxx); $maxy = int($maxy); $maxz = int($maxz);
+$minx = int($minx); $miny = int($miny); $minz = int($minz);
+print "$maxx $maxy $maxz\n";
+print "$minx $miny $minz\n";
+my $diffx = $maxx - $minx + 1 ; my $diffy = $maxy - $miny  + 1; my $diffz = $maxz - $minz  + 1;
+my $CNT = 0 ; 
+my $pseudoatom = new Atom();
+$pseudoatom->SetIdx(10000);
+
+
+my $del = 1 ; 
+my $CNTATOMS = 0 ; 
+my $table = {};
+foreach my $p (0..$diffx){
+	my $X = $del * $p + $minx ; 
+    foreach my $q (0..$diffy){
+	    my $Y = $del * $q + $miny ; 
+        foreach my $r (0..$diffz){
+	        my $Z = $del * $r + $minz ; 
+	        my $str = MakeKeyFromCoord($X,$Y,$Z);
+			$table->{$str} = {};
+			$CNT++ ;
+        }
+    }
+}
+
+
+
+my $tablefilled = {};
+foreach my $a1 (@atoms1){
+	my ($x,$y,$z) = $a1->Coords();
+	next if(!defined $x);
+    $x = int($x); $y = int($y); $z = int($z);
+	my $Sx  = $x- 3 ; my $Ex  = $x + 3 ;
+	my $Sy  = $y- 3 ; my $Ey  = $y + 3 ;
+	my $Sz  = $z- 3 ; my $Ez  = $z + 3 ;
+	my $found = 0 ;
+    foreach my $p ($Sx..$Ex){
+        foreach my $q ($Sy..$Ey){
+            foreach my $r ($Sz..$Ez){
+                  $pseudoatom->SetCoords($p,$q,$r);
+				   my $d = $pseudoatom->Distance($a1) ;
+				   $d  = util_format_float($d,1);
+				   #print STDERR "$d $p $q $r \n";
+				   if($d < 1){  
+				   	   $found = 1 ;
+					   $CNTATOMS++ ;
+	                   my $str = MakeKeyFromCoord($p,$q,$r);
+					   if(!defined $table->{$str}){
+					   	   $table->{$str}->{ATOMLIST} = [];
+					   }
+					   push @{$table->{$str}->{ATOMLIST}}, $a1 ;
+					   $tablefilled->{$str} = 1 ;
+				   }
+				   last if($found);
+            }
+		    last if($found);
+        }
+		last if($found);
+    }
+	if(!$found){
+		$a1->Print();
+		die ;
+	}
+}
+
+
+my $tablesurface  = GetSurface($table,$tablefilled) ; 
+
+my $tablecavity = {};
+foreach my $Z ($minz..$maxz){
+    my @ll ; 
+	my @Xs ; 
+    foreach my $X ($minx..$maxx){
+	    my $found = 0 ; 
+		my $q = 0 ; 
+        foreach my $Y ($miny..$maxy){
+			$q++ ;
+	        my $str = MakeKeyFromCoord($X,$Y,$Z);
+		    if(exists $tablesurface->{$str}){
+			    push @ll, $q ; 
+			    $found = 1 ; 
+			    last ; 
+		    }
+        }
+	    if(!$found){
+			    push @ll, $diffy ; 
+	    }
+		push @Xs, $X ; 
+    }
+	my $N = @ll -1 ;
+
+	## ignore difference of one element - make it smooth.
+	## Is this needed?
+    foreach my $i (2..$N){
+		 if($ll[$i] eq $ll[$i-2]){
+			 $ll[$i-1] = $ll[$i];
+		 }
+	}
+	
+    print "\n\n@ll", "\n";
+
+	my @liststr  = Stringify(@ll);
+    print "@liststr", "\n";
+	my ($lastidx,$P,$Q,$R,$A,$B,$C) ;
+	$lastidx = 0 ;
+	while(defined $lastidx){
+	    ($lastidx,$P,$Q,$R,$A,$B,$C) = Fsm(\@ll,\@liststr,\@Xs,$lastidx);
+	    if(defined $lastidx){
+		    print "cavity $P,$Q,$R X range = $A,$B,$C \n";
+
+		    my $mid = int(($P + $R)/2);
+		    foreach my $XX ($A..$C){
+		        foreach my $YY ($mid..$Q){
+	               my $a1 = MakeKeyFromCoord($XX,$YY,$Z);
+				   if(!exists $tablefilled->{$a1}  && !exists $tablesurface->{$a1}){
+				   	   $tablecavity->{$a1} = 1;
+				   }
+
+				   ## go up 
+				   foreach my $XXX ($XX..$maxx){
+	                    my $b1 = MakeKeyFromCoord($XXX,$YY,$Z);
+						last if(exists $tablecavity->{$b1});
+				   	    if(exists $tablefilled->{$b1} || exists $tablesurface->{$b1}){
+				             foreach my $LLL ($XX..$XXX){
+				   	                $tablecavity->{$b1} = 1;
+							 }
+						     last;
+						}
+				   }
+				   ## go down 
+				   foreach my $XXX ($minx..$XX){
+	                    my $b1 = MakeKeyFromCoord($XXX,$YY,$Z);
+						last if(exists $tablecavity->{$b1});
+				   	    if(exists $tablefilled->{$b1} || exists $tablesurface->{$b1}){
+				             foreach my $LLL ($XXX..$XX){
+				   	                $tablecavity->{$b1} = 1;
+							 }
+						     last;
+						}
+				   }
+
+			    }
+		    }
+	    }
+	}
+}
+
+sub Fsm{
+	my ($list,$liststr,$Xs,$idx) = @_ ;
+	my @list = @{$list};
+	my @Xs = @{$Xs};
+	my $N = @list - 1 ;
+	my @liststr = @{$liststr};
+	my $M = @liststr  - 1;
+	die "$N $M" if($N ne $M);
+	my $foundstart ; 
+	my ($P,$Q,$R);
+	my ($A,$B,$C);
+	my $lastidx ; 
+	my $state = 0 ; 
+	foreach my $i ($idx..$N){
+		my $w = $liststr[$i];
+		if($state eq 0){
+		    next if($w ne "D");
+			$P = $list[$i];
+			$A = $Xs[$i];
+			$state = 1 ;
+		}
+		elsif($state eq 1){
+		    if($w eq "I"){
+			    $Q = $list[$i];
+			    $B = $Xs[$i];
+			    $state = 2 ;
+			}
+			elsif($w eq "S" || $w eq "D"){ ## after the first decrease, ignore S and D
+			    $P = $list[$i];
+			    $A = $Xs[$i];
+			    $state = 1 ;
+			}
+		}
+		elsif($state eq 2){
+		    next if($w ne "D");
+			$R = $list[$i];
+			$C = $Xs[$i];
+			$lastidx = $i ;
+			## after the last D increment for S - might as well not?
+			foreach my $j ($i..$N){
+		        my $w = $liststr[$j];
+		        if($w eq "S"){
+			        $R = $list[$j];
+			        $C = $Xs[$j];
+			        $lastidx = $j ;
+				}
+				else{
+				   last ;
+				}
+			}
+
+			last ;
+		}
+	}
+	return ($lastidx,$P,$Q,$R,$A,$B,$C);
+}
+
+exit ;
+
+
+sub MakeKeyFromCoord{
+	my ($X,$Y,$Z) = @_ ;
+	my $str = "$X#$Y#$Z";
+	return $str ;
+}
+sub MakeCoordFromKey{
+	my ($str) = @_ ;
+	my ($x,$y,$z) = split "#", $str ;
+	return ($x,$y,$z);
+}
+
+
+sub Filled{
+	my ($t,$coord) = @_ ; 
+	return 1 if(exists $t->{$coord}->{ATOMLIST});
+	return 0 ;
+}
+
+sub PointExists{
+	my ($t,$coord) = @_ ; 
+	return 1 if(exists $t->{$coord});
+	return 0 ;
+}
+
+
+
+
+sub usage{
+my ($msg) = @_ ;
+print $msg , "\n" ;
+print << "ENDOFUSAGE" ; 
+ENDOFUSAGE
+die ;
+}
+
+
+sub GetSurface{
+	## dont need $t 
+	my ($t,$tf) = @_ ; 
+	my $ts = {};
+    foreach my $k (keys %{$tf}){
+		my @l = GetPointsAroundOnePoint($k);
+		foreach my $a1 (@l){
+	        $ts->{$a1} = 1 if(! exists $tf->{$a1});
+		}
+    }
+    
+    foreach my $k (keys %{$tablesurface}){
+	    print "surface $k \n";
+    }
+	return $ts ; 
+}
+
+sub Stringify{
+	my (@ll) = @_ ; 
+	my @l ;
+	my $prev ; 
+	my $done = 0 ;
+	my $Dseen = 0 ;
+	foreach my $i (@ll){
+		if(!defined $prev){
+			push @l, "S";
+			$prev = $i ;
+		}
+		else{
+			my $diff = $i - $prev ; 
+			my $w = "";
+			$w = "S" if(abs($diff) <= $DIFF2IGNORE);
+			if($diff > $DIFF2IGNORE){
+			    $w = "I" ;
+				### first I should be preceded by D 
+				if(!$Dseen && !$done){
+					 pop @l ;
+			         push @l, "D" ; 
+					 $done = 1 ;
+				}
+			}
+			if($diff < -$DIFF2IGNORE){
+				$Dseen = 1 ;
+			    $w = "D" ;
+			}
+			die "$diff = $i - $prev  " if ($w eq "");
+			push @l, $w ; 
+			$prev = $i ;
+		}
+	}   
+	return @l ;
+}
+
+
+sub GetPointsAroundOnePoint{
+	    my ($k) = @_ ;
+	    my ($x,$y,$z) = MakeCoordFromKey($k);
+		my @l ; 
+	    my $Sx  = $x- 1 ; my $Ex  = $x + 1 ; my $Sy  = $y- 1 ; my $Ey  = $y + 1 ; my $Sz  = $z- 1 ; my $Ez  = $z + 1 ; 
+        foreach my $p ($Sx..$Ex){
+            foreach my $q ($Sy..$Ey){
+                foreach my $r ($Sz..$Ez){
+	                  push @l, MakeKeyFromCoord($p,$q,$r);
+			    }
+			}
+		}
+	    #push @l, MakeKeyFromCoord($Sx,$y,$z); push @l, MakeKeyFromCoord($Ex,$y,$z); push @l, MakeKeyFromCoord($x,$Sy,$z); push @l, MakeKeyFromCoord($x,$Ey,$z); push @l, MakeKeyFromCoord($x,$y,$Sz); push @l, MakeKeyFromCoord($x,$y,$Ez);
+		return @l ;
+}
+
+sub Cluster{
+      my ($ts,$tc,$tf) = @_ ;  
+	  my $global = {};
+	  my $alias = {};
+
+
+	  my $cluster = 0 ; 
+	  while(keys %{$tc}){
+	  	  $cluster++;
+	  	  my @k = (keys %{$tc});
+		  my $k = shift @k ;
+		  my @l = GetPointsAroundOnePoint($k);
+		  my @cluster ;
+		  foreach my $a1 (@l){
+		  	  if(exists $global->{$a1}){
+			  	my $x = $global->{$a1};
+			  }
+
+		  	  if(exists $tc->{$a1}){
+				 delete $tc->{$a1} ;
+			  }
+			  push @cluster , $a1 ;
+		  }
+	  }
+
+}

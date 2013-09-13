@@ -1,0 +1,102 @@
+
+sub MakeCavity{
+	my ($x,$y,$z,$num,$cavities,$bounding,$done) = @_ ;
+
+    #print "$x $y $z ----------\n";
+
+	my @l ;
+	my $added = 0 ;
+	foreach my $i ($x..$maxx){
+	    my $str = MakeKeyFromCoord($i,$y,$z);
+		if(PointExists($table,$str)){
+			if(!Filled($table,$str)){
+				push @{$cavities->{$num}}, $str ;
+				$done->{$str} = $num ;
+				$added++ ;
+			}
+			else{
+				push @{$bounding->{$num}}, $str ;
+	            $str = MakeKeyFromCoord($i+1,$y,$z);
+				push @l, $str ;
+			    last ; 
+			}
+		}
+	}
+	foreach my $i ($y..$maxy){
+	    my $str = MakeKeyFromCoord($x,$i,$z);
+		if(PointExists($table,$str)){
+			if(!Filled($table,$str)){
+				push @{$cavities->{$num}}, $str ;
+				$done->{$str} = $num ;
+				$added++ ;
+			}
+			else{
+				push @{$bounding->{$num}}, $str ;
+	            $str = MakeKeyFromCoord($x,$i+1,$z);
+				push @l, $str ;
+			    last ; 
+			}
+		}
+	}
+	foreach my $i ($z..$maxz){
+	    my $str = MakeKeyFromCoord($x,$y,$i);
+		if(PointExists($table,$str)){
+			if(!Filled($table,$str)){
+				push @{$cavities->{$num}}, $str ;
+				$done->{$str} = $num ;
+				$added++ ;
+			}
+			else{
+				push @{$bounding->{$num}}, $str ;
+	            $str = MakeKeyFromCoord($x,$y,$i+1);
+				push @l, $str ;
+			    last ; 
+			}
+		}
+	}
+	#print "Added $added for $num \n";
+	return @l ;
+
+}
+my $cavitynum = 1 ;
+my $CAVITIES  = {};
+my $BOUNDING  = {};
+my $pointsdone = {};
+### insert one point
+my $STR = MakeKeyFromCoord($minx+4,$miny+4,$minz+4);
+my @keys ;
+push @keys,$STR ; 
+while(@keys){
+	 my $s = shift @keys ;
+	 my ($x,$y,$z) = MakeCoordFromKey($s);
+     my @l = MakeCavity($x,$y,$z,$cavitynum,$CAVITIES,$BOUNDING,$pointsdone) ;
+	 push @keys, @l ;
+	 $cavitynum++ ; 
+}
+
+
+foreach my $k (sort {$a <=> $b} keys %{$CAVITIES}){
+	my @l = @{$CAVITIES->{$k}};
+	my $N = @l ;
+	if(defined $BOUNDING->{$k}){
+	     my @bounding = @{$BOUNDING->{$k}};
+		 my $residue = {};
+	     foreach my $b (@bounding){
+		     my @atomlist =  @{$table->{$b}->{ATOMLIST}};
+		     foreach my $a (@atomlist){
+			     my $num = $a->GetResNum();
+				 $residue->{$num} = 1 ; 
+				 $a->Print();
+
+		     }
+	     }
+		 my $NN = keys %{$residue} ;
+	     print STDERR "cavity $k has $N elements and $NN bounding residues\n";
+	}
+}
+
+
+
+my $ncellsfilled = keys %{$table} ;
+
+print "CNT = $CNT , atomcnt = $CNTATOMS ncellsfilled = $ncellsfilled  \n";

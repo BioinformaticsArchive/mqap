@@ -1,0 +1,466 @@
+#!/usr/bin/perl -w 
+use strict ;
+use FileHandle ;
+use Getopt::Long;
+use Cwd ;
+use MyUtils;
+  use Time::HiRes qw( usleep ualarm gettimeofday tv_interval
+   clock_gettime clock_getres  clock
+   );
+
+
+use PDB;
+use Atom;
+use Residue;
+
+use POSIX qw(floor);
+use Math::Combinatorics;
+my $commandline = util_get_cmdline("",\@ARGV) ;
+my ($anndir,$pdb1,$pdb2,$infile,$outfile,$which_tech,$dontrunpymol);
+my ($interactive,$close2activesite,$annotate,$findresidues,$maxresults,$inconf,$outconf,$resultfile,$checkself);
+my ($grpconfig) = $ENV{CONFIGGRP} or die ;
+my $MINDIST = 2 ;
+$, = "  ";
+GetOptions(
+            "pdb1=s"=>\$pdb1 ,
+            "anndir=s"=>\$anndir ,
+            "annotate"=>\$annotate ,
+            "interactive"=>\$interactive ,
+            "checkself"=>\$checkself ,
+            "dontrunpymol"=>\$dontrunpymol ,
+            "findresidues"=>\$findresidues ,
+            "which_tech=s"=>\$which_tech ,
+            "resultfile=s"=>\$resultfile ,
+            "maxresults=i"=>\$maxresults ,
+            "inconf=s"=>\$inconf ,
+            "close2activesite=i"=>\$close2activesite ,
+            "outconf=s"=>\$outconf ,
+            "grpconfig=s"=>\$grpconfig ,
+            "outfile=s"=>\$outfile 
+           );
+die "Dont recognize command line arg @ARGV " if(@ARGV);
+usage( "Need to give a output file name => option -outfile ") if(!defined $outfile);
+my $ofh = util_write($outfile);
+my ($RESULTDIR,$PDBDIR,$FASTADIR,$APBSDIR,$FPOCKET,$SRC) = util_SetEnvVars();
+
+
+usage( "Need to give a first protein pdb name => option -pdb1 ") if(!defined $pdb1);
+#usage( "Need to give a second protein pdb name => option -pdb2 ") if(!defined $pdb2);
+$pdb1 = uc($pdb1);
+my $origname = "$pdb1";
+$pdb1 = "$PDBDIR/$pdb1.pdb";
+
+my $pdb = new PDB();
+$pdb->SetLogFile($ofh);
+$pdb->ReadPDB($pdb1);
+
+if(defined $interactive){
+    while(){
+	    print STDERR "\n\n\n\n========================================\n";
+	    print STDERR "Choose from the following options \n";
+	    print STDERR "========================================\n";
+	    print STDERR " 1) exit \n";
+	    print STDERR " 2) distance between 2 atoms or 2 residues with given atom type \n";
+	    print STDERR " 3) query residue type\n";
+	    print STDERR " 4) Distance between the CA atom of 2 residues\n";
+	    print STDERR " 5) Closest Residue to given Residue \n";
+	    print STDERR " 6) Closest Residue List \n";
+	    print STDERR " 7) Query Residue number\n";
+	    print STDERR " 8) Query Atom number\n";
+	    print STDERR " 9) Angle between 3 residues in order \n";
+	    #print STDERR " 10) ReadConfig \n";
+	    #print STDERR " 11) MatchConfig \n";
+	    my $qnum = util_EnterNumber();                 
+	    if($qnum == 1){
+		    exit();
+	    }
+	    elsif($qnum == 2){
+		    QueryDistanceAtoms();
+	    }
+	    elsif($qnum == 3){
+		    QueryResidueTypes();
+	    }
+	    elsif($qnum == 4){
+		    QueryDistanceResidues();
+	    }
+	    elsif($qnum == 5){
+		    QueryClosestResiduePair();
+	    }
+	    elsif($qnum == 6){
+		    QueryClosestResidueList();
+	    }
+	    elsif($qnum == 7){
+		    QueryResidue();
+	    }
+	    elsif($qnum == 8){
+		    QueryAtomNumber();
+	    }
+	    elsif($qnum == 9){
+		    QueryAngleBetween3Residues();
+	    }
+	    #elsif($qnum == 10){
+		    #ReadConfig();
+	    #}
+	        #elsif($qnum == 11){
+		    #MatchConfig();
+	    #}
+	    else{
+		    print STDERR "Error: unknown query number\n";
+	    }
+
+    }
+}
+elsif(defined $annotate){
+    usage( "Need to give input configuration file => option -inconf ") if(!defined $inconf);
+    usage( "Need to give output configuration file which will be annotated => option -outconf ") if(!defined $outconf);
+    Annotate($inconf,$outconf);
+}
+elsif(defined $findresidues){
+    usage( "Need to give input configuration file => option -inconf ") if(!defined $inconf);
+	my  ($seconds, $microseconds) = gettimeofday;
+    MatchConfig($inconf,$close2activesite);
+	my  $t0 = [gettimeofday];
+	my $elapsed = tv_interval ( $t0, [$seconds, $microseconds]);
+	print  "Elapsed = $elapsed \n";
+	print STDERR  "Elapsed = $elapsed \n";
+}
+elsif(defined $checkself){
+    usage( "Need to give input configuration file => option -inconf ") if(!defined $inconf);
+    usage( "Need to give results file=> option -resultfile ") if(!defined $resultfile);
+	$outconf = "junk";
+    my $atoms1 = Annotate($inconf,$outconf);
+	my @results= $pdb->ParseResultsFile($resultfile,1);
+	my $cnt = 0 ;
+	my @atomlist ; 
+	foreach my $result (@results){
+	    my @atoms = @{$result->{ATOMS}};
+
+		foreach my $atom (@atoms){
+			my ($res,$num,$type) = split "/", $atom ;
+			my $resObj = $pdb->GetResidueIdx($num);
+			my ($a) = $pdb->GetAtomFromResidueAndType($num,$type) or die ;
+		    push @atomlist, $a ;
+			my $a1 = shift @{$atoms1};
+			if($a1 ne $a){
+			print "Error: Protein $pdb1 does not match with self and resultfile $resultfile\n" ;
+			last ;
+			}
+		}
+		print "Info : Protein $pdb1 Matches with self and resultfile $resultfile\n";
+
+	}
+}
+else{
+	die "Error: Dont know what to run" ; 
+}
+
+
+
+sub QueryDistanceAtoms{
+	print STDERR " Enter the atoms/residues whose distance you want to see\n";
+	my ($n1,$n2) = util_EnterTwoNumbers();
+	print STDERR " if residues, enter the atom type. Else just press enter\n";
+	my $qname = <> ;
+	chomp $qname ; 
+	my @l = split " ",$qname ; 
+	my ($a1,$a2);
+	if(@l){
+	       my ($t1,$t2) = @l ;
+           my ($res1,$res2) = $pdb->GetResidueIndices($n1,$n2);
+	
+	       $a1 = $res1->GetAtomType($t1);
+	       $a2 = $res2->GetAtomType($t2);
+	       return undef if(!defined ($a1 && $a2)) ; 
+	}
+	else{
+
+	    $a1 = $pdb->GetAtomIdx($n1);
+	    $a2 = $pdb->GetAtomIdx($n2);
+	}
+    
+	if(defined $a1 and defined $a2){
+		    my $d = $pdb->DistanceAtoms($a1,$a2); 
+		    $pdb->PrintResults("Distance between atoms is $d"); 
+	}
+	return 0 ; 
+	
+}
+sub QueryDistanceResidues{
+	print STDERR " Enter the residues whose distance you want to see\n";
+	my ($n1,$n2) = util_EnterTwoNumbers();
+
+	my $a1 = $pdb->GetResidueIdx($n1);
+	my $a2 = $pdb->GetResidueIdx($n2);
+
+	if(defined $a1 and defined $a2){
+		my $ca1 = $a1->GetCAAtom();
+		my $ca2 = $a2->GetCAAtom();
+		my $d = $pdb->DistanceAtoms($ca1,$ca2); 
+		$pdb->PrintResults("Distance between the CA atoms of residues with index $n1 and $n2 is $d"); 
+
+	    my ($minDist,$a1,$a2) = $pdb->MinDistanceBetweenResidues($n1,$n2);
+		print "Min Distance is $minDist between atoms\n";
+		$a1->Print();
+		$a2->Print();
+	}
+	return 0 ; 
+	
+}
+
+sub QueryResidueTypes{
+	print STDERR " Enter residue types \n";
+	my $qname = <> ;
+	chomp $qname ; 
+	my @l = split " ",$qname ; 
+	my @resStrs = (); 
+	foreach my $r (@l){
+		push @resStrs, QueryResidueType($r); 
+	}
+
+	my $resstr  = join " ",@resStrs ;
+	my $exec = "pymol.residues.pl -out ooo.p1m -pdb1 $pdb1 $resstr\n";
+	#RunPymol($exec);
+}
+
+sub QueryResidueType{
+	my ($name) = @_ ; 
+	$name = $pdb->ConvertResidue2ThreeLetter($name);
+	my (@resnums) = $pdb->QueryResidueType($name,1);
+	foreach my $r (@resnums){
+		$r = $r . $name ; 
+	}
+	my $resstr  = join " -expr ",@resnums ;
+	$resstr  = " -expr $resstr";
+	return ($resstr); 
+	my $exec = "pymol.residues.pl -out ooo.p1m -pdb1 $pdb1 $resstr\n";
+	RunPymol($exec);
+}
+
+sub QueryAtomNumber{
+	print STDERR " Enter atom number \n";
+	my $nm = util_EnterNumber();
+	my $atom = $pdb->GetAtomIdx($nm);
+	$atom->Print();
+
+}
+
+sub QueryClosestResiduePair{
+	print STDERR " Enter the residues whose distance you want to see\n";
+	my ($n1,$n2) = util_EnterTwoNames();
+	my $cutoff = 1000;
+	my $ignorelist = {};
+	my $has2be = -1;
+	my @results =  $pdb->ClosestResiduePair($n1,$n2,$cutoff,$ignorelist,$has2be);
+	foreach my $r (@results){
+	    print "RESULT $r->{DIST} $r->{RESPAIR} $r->{ATOMPAIR} $r->{ATOMTYPEPAIR} \n";
+	}
+}
+
+
+sub QueryClosestResidueList{
+	print STDERR " Enter the residues \n";
+	my $qname = <> ;
+	chomp $qname ; 
+	my $cutoff = 1000 ; 
+	my @l = split " ",$qname ; 
+	my $ignorelist = {};
+
+	#print STDERR " Enter the start residue \n";
+	#my $has2be = <> ;
+	#chomp $has2be ; 
+	#$has2be = -1 if($has2be =~ /^\s*$/);
+	my $has2be = -1 ;
+	
+	my $a = shift @l ;
+	my $b = shift @l ; 
+	my $two_residues = "$a $b";
+	my (@results) = $pdb->ClosestResiduePair($a,$b,$cutoff,$ignorelist,$has2be);
+	if(@results == 0){
+	    print "Error: Did not find pair of residues $two_residues, hence stopping\n";
+	    return ; 
+	}
+
+	## take each residue type 
+	while(@l){
+		my $currresidue = shift @l ;
+		print "Info: Now will check dist of existing residues with resiude $currresidue and save the min distances \n";
+		
+
+		## take each result 
+	    foreach my $result (@results){
+	        ## print "\tstarting new result \n";
+			my @l = @{$result->{RESNUM}};
+		    my $ignorelist =  {};
+			map { $ignorelist->{$_} =1 ; } @l ; 
+
+			my @residues = $pdb->QueryResidueType($currresidue,0);
+			## take each residue number for the given residue 
+		    my $tmpResult =  {};
+			foreach my $r1 (@residues){
+				 ## print "\t\tpicking residue $r1\n";
+
+				 my $d = $result->{DIST} ; 
+				 my $str = $r1;
+				 my $goodSolution = 1 ;
+				 foreach my $r2 (@{$result->{RESNUM}}){
+				     ## print "\t\t\tdoing residue $r2\n";
+
+			       my $diff = abs($r2 - $r1);
+			       if($diff <= $MINDIST ){
+				   	 $goodSolution = 0 ; 
+				   }
+
+
+				     ## ignore the residue number if its already in the result 
+			         if(exists $ignorelist->{$r1}){
+				   	     $goodSolution = 0 ; 
+					 }
+
+	                 my ($minDist,$a1,$a2) = $pdb->MinDistanceBetweenResidues($r1,$r2,$ignorelist);
+					 die if(!defined $a1);
+
+					 $d+=$minDist ; 
+					 $str= $str. "_" . $r2 . "_" . $a1->GetIdx() . "_" . $a2->GetIdx() ;
+				 }
+				 if($goodSolution){
+				     $tmpResult->{$d} =  $str  ; 
+				 }
+			}
+
+			my ($dist,$idx,@list) = ChooseBest($tmpResult); 
+			$result->{DIST} = $dist ; 
+			## print " pushing res idx $idx \n";
+		    push @{$result->{RESNUM}} , $idx ;
+			while(@list){
+				my $idx = shift @list ;
+				my $a1 = shift @list ;
+				my $a2 = shift @list ;
+				$pdb->AddResults($result,$a1,$a2);
+
+			}
+		}
+	}
+
+	my @resultssorted = SortResults(\@results); 
+
+	## now print results 
+	foreach my $result (@resultssorted){
+	    print "Printing new result \n";
+	    print "\t Dist = $result->{DIST} \n";
+	    print "\t Residue indices = \n";
+		foreach my $residx (@{$result->{RESNUM}}){
+			my $res = $pdb->GetResidueIdx($residx);
+			$res->Print(1); ## print short 
+		}
+	    print "\t Atom indices = \n";
+		foreach my $idx (@{$result->{ATOM}}){
+			my $atom = $pdb->GetAtomIdx($idx);
+			$atom->Print();
+		}
+
+		my $cnt = 0 ; 
+		my @atoms = @{$result->{ATOM}} ; 
+		while(@atoms){
+			my $a1 = shift @atoms ; 
+			my $a2 = shift @atoms ; 
+			my $atom1 = $pdb->GetAtomIdx($a1);
+			my $atom2 = $pdb->GetAtomIdx($a2);
+			my $r1 = $atom1->GetResNum();
+			my $r2 = $atom2->GetResNum();
+			my $nm1 = $atom1->GetType();
+			my $nm2 = $atom2->GetType();
+
+			print "distance mydist.$cnt ,  /query//B/$r1/$nm1 ,  /query//B/$r2/$nm2 \n";
+			$cnt++;
+
+		}
+
+		#last ; ## just do one 
+	}
+
+}
+
+sub SortResults{
+	my ($l ) = @_ ; 
+	my @resultssorted = sort { $a->{DIST} <=> $b->{DIST} } @{$l} ;
+	return @resultssorted ; 
+}
+
+sub ChooseBest{
+	my ($tmpResult) = @_ ; 
+    foreach my $key (sort  { $a <=> $b }  keys %{$tmpResult}){
+	    #print "Min dist is $key for seq $tmpResult->{$key} \n";
+	    my @f = split "_",  $tmpResult->{$key} ;
+	    my $idx = shift @f ; 
+	    return ($key,$idx,@f);
+	}
+}
+
+sub QueryResidue{
+	print STDERR " Enter residue number \n";
+	my $qnum = util_EnterNumber();
+
+	my $residue = $pdb->GetResidueIdx($qnum);
+	$residue->Print();
+	
+}
+
+sub QueryAngleBetween3Residues{
+	print STDERR " Enter the 3 residues \n";
+	my $qname = <> ;
+	chomp $qname ; 
+	my $cutoff = 1000 ; 
+	my @l = split " ",$qname ; 
+    die "Need 3 residues " if(@l != 3);
+	my ($a,$b,$c) = @l ; 
+	my $t1 = "OG";
+	my $t2 = "NZ";
+	my $t3 = "OH";
+
+	print STDERR " Enter the 3 atom types \n";
+	$qname = <> ;
+	chomp $qname ; 
+	@l = split " ",$qname ; 
+    if(@l == 3){
+	     ($t1,$t2,$t3) = @l ; 
+	}
+    	
+	my ($a1,$a2,$a3) = $pdb->AngleBetweenThreeResiduesWithGivenAtomsPermuted($a,$b,$c,$t1,$t2,$t3);
+	my ($d1,$d2,$d3) = $pdb->DistanceBetweenThreeResiduesWithGivenAtoms($a,$b,$c,$t1,$t2,$t3);
+
+    my @distances = ("$a/$t1", "$b/$t2", "$c/$t3");
+    my $resstr = util_AddBeforeEach("-dist",@distances);
+
+	my $exec = "pymol.residues.pl -out ooo.p1m -pdb1 $pdb1 $resstr\n";
+	$pdb->RunPymol($exec);
+	my $enter = <>;
+}
+
+sub Annotate{
+    my ($inconf,$outconf) = @_ ; 
+	my $atoms = $pdb->ReadConfigAndThenWriteValues($inconf,$outconf,$grpconfig);
+	return $atoms ;
+}
+
+sub MatchConfig{
+    my ($outconf,$cl) = @_ ; 
+	print STDERR "Info : Processing $outconf \n";
+	$pdb->MatchConfig($origname,$anndir,$outconf,$grpconfig,$cl);
+}
+
+sub ShowDistances{
+   print STDERR " Enter the atom numbers \n";
+   my $qname = <> ;
+   chomp $qname ; 
+   my @l = split " ",$qname ; 
+	
+
+}
+
+sub usage{
+    my ($msg) = @_ ;
+    print $msg , "\n" ; 
+print << "ENDOFUSAGE" ; 
+ENDOFUSAGE
+    die ;
+}
